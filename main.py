@@ -7,6 +7,7 @@ import harness.toolsets.fs  # noqa: F401
 import harness.toolsets.shell  # noqa: F401
 import harness.toolsets.web  # noqa: F401
 from harness.llm import LLMClient
+from harness.toolsets.memory import memory_index
 from harness.log import RunLog
 from harness.loop import run_turn
 from harness.policy import Policy
@@ -25,7 +26,11 @@ def main():
     llm = LLMClient()
     log = RunLog()
     policy = Policy()
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system = SYSTEM_PROMPT
+    index = memory_index()
+    if index:
+        system += "\n\nPersistent memory index (use read_memory for details):\n" + index
+    messages = [{"role": "system", "content": system}]
     tool_names = ", ".join(t["function"]["name"] for t in registry.schemas())
     print(f"harness REPL — {llm.model} — logging to {log.path}")
     print(f"tools: {tool_names}")

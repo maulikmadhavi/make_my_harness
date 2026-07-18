@@ -10,7 +10,8 @@ import json
 
 
 class Policy:
-    AUTO_ALLOW = {"read_file", "web_search"}
+    # save_memory/read_memory only touch the memory/ directory.
+    AUTO_ALLOW = {"read_file", "web_search", "save_memory", "read_memory"}
 
     def __init__(self):
         self.always = set()

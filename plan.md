@@ -53,7 +53,7 @@ One commit per stage.
     syntax) are salvaged by parsing the intended call out of the error body,
     else retried at escalating temperature.
 
-### [ ] Stage 4 — Persistent memory
+### [x] Stage 4 — Persistent memory
 - `memory/MEMORY.md` index + one markdown file per fact.
 - `harness/toolsets/memory.py`: `save_memory`, `read_memory`; index injected
   into the system prompt at REPL start (progressive disclosure).

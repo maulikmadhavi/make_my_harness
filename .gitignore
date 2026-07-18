@@ -9,3 +9,6 @@ __pycache__/
 # harness session logs
 logs/
 
+# persistent agent memory (runtime data)
+memory/
+
