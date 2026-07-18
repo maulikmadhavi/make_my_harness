@@ -4,6 +4,13 @@ Goal: a minimal, fully understood agent harness built stage by stage.
 Each stage is small, working, and verified live before the next begins.
 One commit per stage.
 
+> Stages 7–10 below were re-prioritized on 2026-07-19 after external review
+> by ChatGPT, DeepSeek, and Gemini (repo pasted as a README description, not
+> the code) plus a Nemotron synthesis of all three. See
+> `feedback_/feedback_consolidated.md` for the fact-checked reflection —
+> what those reviews got right, where they were already out of date, and
+> the reasoning behind what's kept vs. cut below.
+
 ## Design principles
 
 1. The harness is a loop around one function: `complete(messages, tools) -> {content, tool_calls}`.
@@ -98,12 +105,114 @@ One commit per stage.
   repo and ran `make-harness` live from an unrelated directory — full
   LLM round-trip succeeded, log file created relative to that directory.
 
-### [ ] Stage 7 — Later (out of initial scope)
-Markdown skill packages (`skills/<name>/SKILL.md` + `load_skill` tool),
-subagents for context isolation, streaming, session resume from a log.
+### [ ] Stage 7 — Project hygiene (before behavior changes, not after)
+Ordered first deliberately: per this repo's own karpathy-guidelines
+("define success criteria, write tests, then make them pass"), Stage 8's
+behavior changes should land with regression coverage already in place —
+and every one of them is trivially unit-testable with a stub LLM, exactly
+like the Stage 5 compaction tests that were written, passed, and never
+committed.
+- `LICENSE` — required for a repo described as open-source; currently
+  absent entirely. Five-minute task; blocks legal reuse today.
+- `tests/` (pytest): `_salvage_tool_call` (valid/invalid/unmatched cases),
+  `context.compact()` (stub/summarize/pairing-safety paths — recreate the
+  Stage 5 scratch tests properly), `Registry.execute`'s error path,
+  `toolsets/memory.py`'s `_slug()`.
+- Minimal CI (`.github/workflows/test.yml`): run pytest on push. No lint
+  step yet — not worth the config until the test suite itself exists.
+- Update stale model references: the default backend is now
+  `openai/gpt-oss-120b` (`llm_providers.py`), but README banners and
+  older plan notes still show `llama-3.3-70b-versatile`.
+- Verify: `pytest` passes locally; a pushed commit shows a green check.
+
+### [ ] Stage 8 — Robustness hardening
+Small, high-value fixes for gaps confirmed by reading the actual code
+(see `feedback_/feedback_consolidated.md` §3), built test-first on the
+Stage 7 suite:
+- **Loop short-circuit**: track the last `(tool_name, args)` the loop
+  executed; if the model calls the identical tool with identical args
+  again immediately, don't re-execute — return a synthetic tool result
+  ("[not executed: identical to your previous call — the result would be
+  unchanged; adjust your arguments or approach]"). The nudge must BE the
+  tool result, not replace it: every tool_call id requires a role:"tool"
+  response or the next API request fails — the same pairing rule the
+  Stage 2 deny path already honors. (A floating mid-conversation
+  system-role message, as one reviewer sketched, breaks both the pairing
+  and some backends.) Distinct from the Stage 2 deny-storm fix — this
+  covers *allowed* calls the model repeats.
+- **Head+tail truncation**: `toolsets/shell.py` and `toolsets/web.py`
+  currently keep the first N chars and drop the rest — backwards for
+  shell/build output, where the error is usually at the end. Keep both
+  ends of the budget instead.
+- **Tool-argument repair**: `loop.py`'s `json.loads()` on tool-call
+  arguments currently fails clean (returns an error string) but doesn't
+  try to repair first. Add an outermost-`{...}`-extraction attempt before
+  giving up — distinct from `llm.py`'s existing Groq-specific
+  `tool_use_failed` salvage, which is a different failure mode. (Note:
+  that salvage regex targets llama-3.3's `<function=...>` malformation;
+  now that the default model is gpt-oss-120b it may rarely fire — it
+  stays because it's harmless, only running on `tool_use_failed` errors.)
+- Verify: offline stub-LLM unit tests for all three (deterministic —
+  coaxing a live 120B model into repeating itself is not), plus one live
+  smoke session confirming nothing regressed.
+
+### [ ] Stage 9 — Local / non-tool-calling model support
+Dual-path LLM adapter: native `tool_calls` when the backend supports them
+(current behavior, unchanged), a prompt-injected-tools + text-parsed
+fallback when it doesn't. Make the fork explicit and visible in
+`llm_providers.py` / `llm.py` rather than hidden — this is exactly the
+hybrid adapter the original seven AI plan documents proposed for this
+project and that the Stage 0 plan explicitly deferred ("native tool
+calling only... hybrid fallback deferred").
+- **Scope dependency, decide before starting**: the fallback path is
+  unverifiable without a backend that actually lacks native tool calling.
+  During Stage 0 the explicit decision was "Ollama is not in scope of
+  this project" — starting this stage means reversing that (WSL Ubuntu
+  can host Ollama or a llama.cpp / vLLM server easily; any
+  OpenAI-compatible endpoint without native tools qualifies).
+- Verify: same REPL session works identically against Groq (native path)
+  and a local model with no native tool-calling support (fallback path),
+  including a tool call round-trip on each.
+
+### [ ] Stage 10 — Deferred, opt-in (do not build speculatively)
+Each item here has a concrete trigger condition; none is worth doing until
+its trigger is real, per this project's own simplicity principle.
+- **`Session` dataclass** (bundle `messages`/`memory`/`cwd`/`token_budget`
+  instead of separate `run_turn()` args) — trigger: once Stage 8's loop
+  short-circuit needs `last_action_signature` to live somewhere, bundling
+  it with the rest of the loop's state stops being optional.
+- **Real streaming** — `GroqChatModel.chat()` already accepts a `stream`
+  param that's always `False` and never wired up. Trigger: perceived
+  REPL latency actually becomes annoying, and only after Stage 9 exists
+  (streaming a text-parsed fallback response is a different shape of work
+  than streaming native `tool_calls` deltas).
+- **Plugin auto-discovery folder** (`plugins/*.py` scanned via
+  `importlib`) — trigger: adding a tool starts requiring more than the
+  current one-line `import make_harness.toolsets.X` in `cli.py`. Not true
+  today at 4 toolsets.
+- **Declarative YAML/TOML config** — trigger: Stage 9 lands and there are
+  2+ real providers to choose between. Building a config file to select
+  between one provider is solving a problem that doesn't exist yet.
+- Markdown skill packages (`skills/<name>/SKILL.md` + `load_skill` tool),
+  subagents for context isolation, session resume from a JSONL log — no
+  new trigger information since these were first deferred; still v2+.
 
 ## Deliberately NOT built
 
-Event bus, plugin system, middleware chain, state machine, workflow engine,
-async. The JSONL logger and the policy gate are the seams where these can
-bolt on later without a rewrite.
+- **Event bus** — considered and explicitly rejected (not just deferred).
+  ChatGPT's review flagged this as highest priority; DeepSeek and a
+  Nemotron synthesis of all reviews independently argued against it —
+  pub/sub indirection actively fights this project's "understandable in an
+  afternoon" goal, and nothing in the codebase today needs to *react* to
+  an event mid-flight (every current consumer of "things that happened" —
+  console output, the JSONL log — is a direct call, not a subscriber).
+  Revisit only if a concrete subscriber use case shows up, not as an
+  architecture-first move.
+- Plugin system, middleware chain, state machine, workflow engine, async —
+  still deferred, not rejected. The JSONL logger and the policy gate are
+  the seams where these can bolt on later without a rewrite.
+- Full tool-metadata schema (cost, parallel_safe, examples, tags) — no
+  consumer exists; nothing here runs tools in parallel or schedules by
+  cost.
+- Multi-agent / DAG / MCP / Tree-of-Thought / Reflection — v3+ territory,
+  no disagreement among any reviewer on this one.
