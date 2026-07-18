@@ -21,7 +21,7 @@ One commit per stage.
 - `main.py`: interactive REPL.
 - Verified: live round-trip; request/response replayable from the log.
 
-### [ ] Stage 1 — Tool calling: read_file, write_file, run_command
+### [x] Stage 1 — Tool calling: read_file, write_file, run_command
 - `harness/tools.py`: `@tool` decorator — OpenAI function schema from
   signature + docstring; `registry.schemas()` / `registry.execute()`.
 - `harness/toolsets/fs.py`: `read_file` (line numbers, 2000-line cap),
