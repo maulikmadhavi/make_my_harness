@@ -40,10 +40,18 @@ One commit per stage.
   Learned live: without this, the model retried denied calls with 10 variants.
 - Verify: prompt appears, `y` executes, `n` ends the turn immediately.
 
-### [ ] Stage 3 — Web search + generic API calls
+### [x] Stage 3 — Web search + generic API calls
 - `harness/toolsets/web.py`: `web_search` (Tavily/Brave key from env),
-  `http_request(method, url, headers, body)`.
-- Verify: answer a current-events question; call a public JSON API.
+  `http_request(method, url, headers_json, body_json)`.
+- Verified: http_request fetched the GitHub API live; web_search returns a
+  clear no-key message until TAVILY_API_KEY or BRAVE_API_KEY is set.
+- Learned live, hardening now in `harness/llm.py`:
+  - backend errors surface the response body (a bare 400 is undebuggable);
+  - system prompt tells the model to report tool errors, not invent results
+    (it hallucinated an answer when search was unavailable);
+  - Groq `tool_use_failed` 400s (llama emits malformed `<function=...>`
+    syntax) are salvaged by parsing the intended call out of the error body,
+    else retried at escalating temperature.
 
 ### [ ] Stage 4 — Persistent memory
 - `memory/MEMORY.md` index + one markdown file per fact.

@@ -5,6 +5,7 @@ import os
 # Importing a toolset registers its tools with the shared registry.
 import harness.toolsets.fs  # noqa: F401
 import harness.toolsets.shell  # noqa: F401
+import harness.toolsets.web  # noqa: F401
 from harness.llm import LLMClient
 from harness.log import RunLog
 from harness.loop import run_turn
@@ -15,7 +16,8 @@ SYSTEM_PROMPT = (
     "You are a helpful coding agent running in a minimal local harness on the user's "
     f"machine (Windows, working directory: {os.getcwd()}). "
     "Use your tools to read/write files and run commands when the task needs it. "
-    "Keep answers concise."
+    "If a tool returns an error, report it to the user honestly — never invent a "
+    "result you did not get from a tool. Keep answers concise."
 )
 
 

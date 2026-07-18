@@ -5,7 +5,10 @@ and gets back a plain dict: {content, tool_calls, usage, raw}.
 Swapping backends (Groq -> Ollama, vLLM, OpenAI, ...) means changing only this file.
 """
 
+import json
 import os
+import re
+
 import requests
 
 
@@ -57,9 +60,33 @@ class GroqChatModel:
             timeout=self.timeout,
         )
 
-        response.raise_for_status()
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"LLM backend error {response.status_code}: {response.text[:500]}"
+            )
 
         return response.json()
+
+
+def _salvage_tool_call(error_text):
+    """Recover the intended tool call from a Groq tool_use_failed error body.
+
+    Returns (name, arguments_json_string) or None if unparseable.
+    """
+    try:
+        body = json.loads(error_text[error_text.index("{"):])
+        failed = body["error"]["failed_generation"]
+    except (ValueError, KeyError):
+        return None
+    m = re.search(r"<function=(\w+)=?\s*(\{.*\})", failed, re.DOTALL)
+    if not m:
+        return None
+    name, arguments = m.group(1), m.group(2)
+    try:
+        json.loads(arguments)
+    except json.JSONDecodeError:
+        return None
+    return name, arguments
 
 
 class LLMClient:
@@ -68,8 +95,37 @@ class LLMClient:
         self.backend = GroqChatModel(**kwargs)
         self.model = self.backend.model
 
-    def complete(self, messages, tools=None):
-        raw = self.backend.chat(messages, tools=tools)
+    def complete(self, messages, tools=None, retries=2):
+        # Groq sometimes 400s with "tool_use_failed" when the model emits
+        # malformed tool syntax (e.g. <function=name{...}</function>). The
+        # error body contains the intended call, so first try to salvage it;
+        # otherwise retry at a higher temperature to break the determinism.
+        for attempt, temperature in enumerate([0.2, 0.6, 1.0][: retries + 1]):
+            try:
+                raw = self.backend.chat(messages, tools=tools, temperature=temperature)
+                break
+            except RuntimeError as e:
+                if "tool_use_failed" not in str(e):
+                    raise
+                salvaged = _salvage_tool_call(str(e))
+                if salvaged:
+                    name, arguments = salvaged
+                    raw = {
+                        "choices": [{"message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [{
+                                "id": f"salvaged_{attempt}",
+                                "type": "function",
+                                "function": {"name": name, "arguments": arguments},
+                            }],
+                        }}],
+                        "usage": {},
+                        "salvaged": True,
+                    }
+                    break
+                if attempt == retries:
+                    raise
         msg = raw["choices"][0]["message"]
         return {
             "content": msg.get("content"),

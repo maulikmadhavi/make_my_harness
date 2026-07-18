@@ -10,7 +10,7 @@ import json
 
 
 class Policy:
-    AUTO_ALLOW = {"read_file"}
+    AUTO_ALLOW = {"read_file", "web_search"}
 
     def __init__(self):
         self.always = set()
