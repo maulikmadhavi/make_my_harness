@@ -1,0 +1,16 @@
+[workspace]
+authors = ["maulikmadhavi <maulikmadhavi@gmail.com>"]
+channels = ["conda-forge"]
+name = "make_harness"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+start = "python main.py"
+
+[dependencies]
+python = "==3.12"
+pip = ">=26.1.2,<27"
+
+[pypi-dependencies]
+requests = ">=2.34.2, <3"
