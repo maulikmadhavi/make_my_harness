@@ -32,11 +32,13 @@ One commit per stage.
 - Verify: count files via command, summarize a file, create a file;
   full tool chain visible in the log.
 
-### [ ] Stage 2 — Permission gate
+### [x] Stage 2 — Permission gate
 - `harness/policy.py`: `read_file` auto-allowed; `write_file` / `run_command`
-  prompt on console (y/n/a = always for session). Denial goes back to the
-  model as the tool result.
-- Verify: prompt appears, `n` is handled gracefully, `a` stops re-prompting.
+  prompt on console (y/n/a = always for session).
+- A denial ends the turn and returns control to the user (denial results are
+  still appended so the tool_call/tool message pairing stays valid).
+  Learned live: without this, the model retried denied calls with 10 variants.
+- Verify: prompt appears, `y` executes, `n` ends the turn immediately.
 
 ### [ ] Stage 3 — Web search + generic API calls
 - `harness/toolsets/web.py`: `web_search` (Tavily/Brave key from env),

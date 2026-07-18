@@ -8,6 +8,7 @@ import harness.toolsets.shell  # noqa: F401
 from harness.llm import LLMClient
 from harness.log import RunLog
 from harness.loop import run_turn
+from harness.policy import Policy
 from harness.tools import registry
 
 SYSTEM_PROMPT = (
@@ -21,6 +22,7 @@ SYSTEM_PROMPT = (
 def main():
     llm = LLMClient()
     log = RunLog()
+    policy = Policy()
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     tool_names = ", ".join(t["function"]["name"] for t in registry.schemas())
     print(f"harness REPL — {llm.model} — logging to {log.path}")
@@ -41,7 +43,7 @@ def main():
         log.event("user_message", content=user)
         messages.append({"role": "user", "content": user})
         try:
-            answer = run_turn(llm, registry, log, messages)
+            answer = run_turn(llm, registry, policy, log, messages)
             print(f"\nagent > {answer}")
         except Exception as e:
             log.event("error", error=f"{type(e).__name__}: {e}")
