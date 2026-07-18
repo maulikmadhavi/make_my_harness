@@ -5,16 +5,14 @@ vLLM, ...); make_harness/llm.py adapts whatever it returns to the rest of
 the harness.
 """
 
-import os
-
-import requests
+import os, requests
 
 
 class GroqChatModel:
     def __init__(
         self,
         api_key=None,
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         endpoint="https://api.groq.com/openai/v1/chat/completions",
         timeout=300,
     ):
@@ -59,9 +57,7 @@ class GroqChatModel:
         )
 
         if response.status_code >= 400:
-            raise RuntimeError(
-                f"LLM backend error {response.status_code}: {response.text[:500]}"
-            )
+            raise RuntimeError(f"LLM backend error {response.status_code}: {response.text[:500]}")
 
         return response.json()
 
