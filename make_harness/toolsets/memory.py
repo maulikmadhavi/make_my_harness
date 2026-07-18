@@ -8,7 +8,7 @@ always knows what it remembers; individual files are read on demand
 import re
 from pathlib import Path
 
-from harness.tools import tool
+from make_harness.tools import tool
 
 MEMORY_DIR = Path("memory")
 INDEX = MEMORY_DIR / "MEMORY.md"

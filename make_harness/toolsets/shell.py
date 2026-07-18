@@ -1,6 +1,6 @@
 import subprocess
 
-from harness.tools import tool
+from make_harness.tools import tool
 
 MAX_OUTPUT = 10_000
 TIMEOUT = 60

@@ -15,25 +15,25 @@ One commit per stage.
 ## Stages
 
 ### [x] Stage 0 — Bare chat + full logging
-- `harness/llm.py`: `LLMClient.complete()` normalizing the custom chat backend
+- `make_harness/llm.py`: `LLMClient.complete()` normalizing the custom chat backend
   (`GroqChatModel`) to `{content, tool_calls, usage, raw}`.
-- `harness/log.py`: `RunLog` — one JSONL file per session, one event per line.
+- `make_harness/log.py`: `RunLog` — one JSONL file per session, one event per line.
 - `main.py`: interactive REPL.
 - Verified: live round-trip; request/response replayable from the log.
 
 ### [x] Stage 1 — Tool calling: read_file, write_file, run_command
-- `harness/tools.py`: `@tool` decorator — OpenAI function schema from
+- `make_harness/tools.py`: `@tool` decorator — OpenAI function schema from
   signature + docstring; `registry.schemas()` / `registry.execute()`.
-- `harness/toolsets/fs.py`: `read_file` (line numbers, 2000-line cap),
+- `make_harness/toolsets/fs.py`: `read_file` (line numbers, 2000-line cap),
   `write_file`.
-- `harness/toolsets/shell.py`: `run_command` (60s timeout, 10k output cap).
-- `harness/loop.py`: `run_turn()` — LLM → tool calls → results → repeat,
+- `make_harness/toolsets/shell.py`: `run_command` (60s timeout, 10k output cap).
+- `make_harness/loop.py`: `run_turn()` — LLM → tool calls → results → repeat,
   `max_steps=15`.
 - Verify: count files via command, summarize a file, create a file;
   full tool chain visible in the log.
 
 ### [x] Stage 2 — Permission gate
-- `harness/policy.py`: `read_file` auto-allowed; `write_file` / `run_command`
+- `make_harness/policy.py`: `read_file` auto-allowed; `write_file` / `run_command`
   prompt on console (y/n/a = always for session).
 - A denial ends the turn and returns control to the user (denial results are
   still appended so the tool_call/tool message pairing stays valid).
@@ -41,11 +41,11 @@ One commit per stage.
 - Verify: prompt appears, `y` executes, `n` ends the turn immediately.
 
 ### [x] Stage 3 — Web search + generic API calls
-- `harness/toolsets/web.py`: `web_search` (Tavily/Brave key from env),
+- `make_harness/toolsets/web.py`: `web_search` (Tavily/Brave key from env),
   `http_request(method, url, headers_json, body_json)`.
 - Verified: http_request fetched the GitHub API live; web_search returns a
   clear no-key message until TAVILY_API_KEY or BRAVE_API_KEY is set.
-- Learned live, hardening now in `harness/llm.py`:
+- Learned live, hardening now in `make_harness/llm.py`:
   - backend errors surface the response body (a bare 400 is undebuggable);
   - system prompt tells the model to report tool errors, not invent results
     (it hallucinated an answer when search was unavailable);
@@ -55,12 +55,12 @@ One commit per stage.
 
 ### [x] Stage 4 — Persistent memory
 - `memory/MEMORY.md` index + one markdown file per fact.
-- `harness/toolsets/memory.py`: `save_memory`, `read_memory`; index injected
+- `make_harness/toolsets/memory.py`: `save_memory`, `read_memory`; index injected
   into the system prompt at REPL start (progressive disclosure).
 - Verify: save a fact, restart the REPL, agent recalls it.
 
 ### [x] Stage 5 — Context compaction
-- `harness/context.py`: token estimate (chars/4); over budget →
+- `make_harness/context.py`: token estimate (chars/4); over budget →
   1) stub tool results outside the recent window,
   2) summarize the older part via one LLM call,
   3) last resort: stub recent tool results too.
@@ -73,7 +73,32 @@ One commit per stage.
   + live session with an 800-token budget (1350 → 368 tokens, agent still
   answered the follow-up correctly).
 
-### [ ] Stage 6 — Later (out of initial scope)
+### [x] Stage 6 — CLI packaging (pip-installable)
+- Renamed the package `harness/` → `make_harness/` (avoids colliding with
+  the generic `harness` name in a shared site-packages).
+- Restored the adapter split that had drifted together during Stage 3
+  hardening: `make_harness/llm_providers.py` is the swappable backend
+  again (`GroqChatModel`), `make_harness/llm.py` is only the adapter +
+  salvage logic. Was duplicated dead code before this stage.
+- `make_harness/cli.py` (moved from root `main.py`): `argparse` with
+  `--version`/`--help`; `main()` is the console-script target.
+  `make_harness/__main__.py` enables `python -m make_harness`. Root
+  `main.py` kept as a thin shim for `python main.py`.
+- `pyproject.toml` (hatchling backend): build metadata + `make-harness`
+  console-script entry point. Separate concern from `pixi.toml` — one is
+  for building/distributing the package, the other for the dev environment.
+- `pixi.toml`: `[pypi-dependencies]` now editable-installs the project
+  itself, so `make-harness` is available inside `pixi run`; `start` task
+  now runs `make-harness` instead of `python main.py`.
+- Verified: `pixi run make-harness --version`/`--help`; live REPL via
+  `pixi run start`, `pixi run python main.py`, and
+  `pixi run python -m make_harness` (all three entry points equivalent);
+  built `dist/make_harness-0.1.0.tar.gz` + `.whl` with `python -m build`;
+  installed the sdist into a throwaway venv with no connection to this
+  repo and ran `make-harness` live from an unrelated directory — full
+  LLM round-trip succeeded, log file created relative to that directory.
+
+### [ ] Stage 7 — Later (out of initial scope)
 Markdown skill packages (`skills/<name>/SKILL.md` + `load_skill` tool),
 subagents for context isolation, streaming, session resume from a log.
 

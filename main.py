@@ -1,65 +1,7 @@
-"""Interactive REPL entry point for the harness."""
+"""Thin shim so `python main.py` keeps working. The real entry point is
+the installed `make-harness` console script (make_harness.cli:main)."""
 
-import os
-import platform
-
-# Importing a toolset registers its tools with the shared registry.
-import harness.toolsets.fs  # noqa: F401
-import harness.toolsets.shell  # noqa: F401
-import harness.toolsets.web  # noqa: F401
-from harness.context import compact
-from harness.llm import LLMClient
-from harness.toolsets.memory import memory_index
-from harness.log import RunLog
-from harness.loop import run_turn
-from harness.policy import Policy
-from harness.tools import registry
-
-SYSTEM_PROMPT = (
-    "You are a helpful coding agent running in a minimal local harness on the user's "
-    f"machine ({platform.system()}, working directory: {os.getcwd()}). "
-    "Use shell commands appropriate for this OS. "
-    "Use your tools to read/write files and run commands when the task needs it. "
-    "If a tool returns an error, report it to the user honestly — never invent a "
-    "result you did not get from a tool. Keep answers concise."
-)
-
-
-def main():
-    llm = LLMClient()
-    log = RunLog()
-    policy = Policy()
-    system = SYSTEM_PROMPT
-    index = memory_index()
-    if index:
-        system += "\n\nPersistent memory index (use read_memory for details):\n" + index
-    messages = [{"role": "system", "content": system}]
-    tool_names = ", ".join(t["function"]["name"] for t in registry.schemas())
-    print(f"harness REPL — {llm.model} — logging to {log.path}")
-    print(f"tools: {tool_names}")
-    print("type 'exit' or Ctrl+C to quit")
-
-    while True:
-        try:
-            user = input("\nyou > ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not user:
-            continue
-        if user.lower() in ("exit", "quit"):
-            break
-
-        log.event("user_message", content=user)
-        messages.append({"role": "user", "content": user})
-        try:
-            messages = compact(messages, llm, log)
-            answer = run_turn(llm, registry, policy, log, messages)
-            print(f"\nagent > {answer}")
-        except Exception as e:
-            log.event("error", error=f"{type(e).__name__}: {e}")
-            print(f"[error] {e}")
-
+from make_harness.cli import main
 
 if __name__ == "__main__":
     main()

@@ -1,4 +1,12 @@
+"""Your custom chat completion script.
+
+This is the one file to swap out for a different backend (OpenAI, Ollama,
+vLLM, ...); make_harness/llm.py adapts whatever it returns to the rest of
+the harness.
+"""
+
 import os
+
 import requests
 
 
@@ -50,7 +58,10 @@ class GroqChatModel:
             timeout=self.timeout,
         )
 
-        response.raise_for_status()
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"LLM backend error {response.status_code}: {response.text[:500]}"
+            )
 
         return response.json()
 

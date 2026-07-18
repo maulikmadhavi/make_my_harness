@@ -6,11 +6,13 @@ platforms = ["win-64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
-start = "python main.py"
+start = "make-harness"
 
 [dependencies]
 python = "==3.12"
 pip = ">=26.1.2,<27"
 
 [pypi-dependencies]
-requests = ">=2.34.2, <3"
+# editable install of this project itself: registers the `make-harness`
+# console script (see pyproject.toml) inside the pixi environment.
+make-harness = { path = ".", editable = true }

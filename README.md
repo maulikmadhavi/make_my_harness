@@ -13,8 +13,11 @@ stage-by-stage execution plan; each stage is one git commit, so
 
 ## What it does
 
-- **Custom LLM backend**: `harness/llm.py` wraps an OpenAI-compatible chat
-  completion class (currently Groq). Swapping backends touches only this file.
+- **A real CLI**: installs as the `make-harness` command (`pip install` or
+  `pixi run`), plus `python -m make_harness` as a fallback.
+- **Custom LLM backend**: `make_harness/llm_providers.py` holds the swappable
+  backend (currently Groq); `make_harness/llm.py` is the adapter the rest of
+  the harness talks to. Swapping backends touches only `llm_providers.py`.
 - **Tools from plain functions**: decorate a Python function with `@tool`
   and its JSON schema is generated from the signature and docstring.
 - **Permission gate**: side-effecting tools ask before running; a denial
@@ -27,7 +30,11 @@ stage-by-stage execution plan; each stage is one git commit, so
 
 ## User guide
 
-### Setup and start
+There are two ways to run this: as a **developer**, working in this repo
+via pixi; or as a **user**, with the tool `pip install`ed like any other CLI.
+Both end up running the same `make-harness` command.
+
+### Option A — developer setup (this repo, via pixi)
 
 Works the same on Windows and Ubuntu/Linux — `pixi.toml` targets both
 `win-64` and `linux-64`. On Ubuntu, install pixi first if you don't have it:
@@ -51,7 +58,44 @@ $env:TAVILY_API_KEY = "..."      # optional, enables web_search (or BRAVE_API_KE
 pixi run start
 ```
 
-You get a REPL:
+`pixi install` does an **editable install** of the project itself (see
+`pixi.toml`'s `[pypi-dependencies]`), which is what registers the
+`make-harness` command inside the pixi environment — `pixi run start` and
+`pixi run make-harness` are equivalent. `pixi run python main.py` and
+`pixi run python -m make_harness` still work too, for whichever invocation
+style you prefer.
+
+### Option B — install as a standalone CLI tool (pip, no repo checkout needed)
+
+Build a distributable tarball (sdist) and wheel from this repo:
+
+```bash
+pip install build
+python -m build --outdir dist
+```
+
+This produces `dist/make_harness-0.1.0.tar.gz` (the source tarball) and
+`dist/make_harness-0.1.0-py3-none-any.whl`. Either can be installed with
+pip into any Python 3.10+ environment — this was verified end-to-end in a
+throwaway venv with no connection to this repo:
+
+```bash
+python -m venv myenv
+myenv/bin/pip install dist/make_harness-0.1.0.tar.gz   # or the .whl
+myenv/bin/make-harness --version
+```
+
+On Windows, use `myenv\Scripts\pip.exe` / `myenv\Scripts\make-harness.exe`.
+Once installed, `make-harness` runs from any directory — tools like
+`read_file`/`run_command` operate relative to wherever you launch it from,
+same as any other CLI. Share the `.tar.gz` with someone else and
+`pip install make_harness-0.1.0.tar.gz` is all they need (plus `GROQ_API_KEY`).
+
+> `pyproject.toml` (build metadata, used by `pip`/`build`) and `pixi.toml`
+> (dev environment, used by `pixi`) are separate, complementary files —
+> `pixi.toml` isn't being replaced.
+
+### Running it
 
 ```
 harness REPL — llama-3.3-70b-versatile — logging to logs\20260718_...jsonl
@@ -65,9 +109,12 @@ you >
   `allow? y = once / n = deny / a = always` — `n` cancels and hands control
   back to you.
 - `exit`, `quit`, or Ctrl+C ends the session.
-- Every session writes one JSONL file to `logs/`; each line is one event
-  (`llm_request`, `llm_response`, `tool_call`, `tool_result`, `permission`,
-  `compaction`, `error`, `done`).
+- Every session writes one JSONL file to `logs/` (created in the current
+  working directory); each line is one event (`llm_request`,
+  `llm_response`, `tool_call`, `tool_result`, `permission`, `compaction`,
+  `error`, `done`).
+- `make-harness --version` prints the installed version;
+  `make-harness --help` shows CLI usage.
 
 ### Verifying each stage manually
 
@@ -187,16 +234,22 @@ Unset the budget afterwards: `unset HARNESS_TOKEN_BUDGET` (bash) /
 ## Layout
 
 ```
-harness/
-  llm.py        LLM adapter (backend + normalization + error salvage)
-  log.py        JSONL run logger
-  tools.py      @tool decorator + registry
-  loop.py       the agent loop
-  policy.py     permission gate
-  context.py    token budget + compaction
-  toolsets/     fs, shell, web, memory tool implementations
-main.py         REPL entry point
-plan.md         staged build plan + lessons learned
-logs/           one JSONL file per session (gitignored)
-memory/         persistent agent memory (gitignored)
+make_harness/
+  cli.py             argparse entry point + the REPL loop
+  llm.py             LLM adapter (normalization + tool_use_failed salvage)
+  llm_providers.py    the swappable backend (currently GroqChatModel)
+  log.py             JSONL run logger
+  tools.py           @tool decorator + registry
+  loop.py            the agent loop
+  policy.py          permission gate
+  context.py         token budget + compaction
+  toolsets/          fs, shell, web, memory tool implementations
+  __main__.py        enables `python -m make_harness`
+main.py              thin shim so `python main.py` still works
+pyproject.toml       build metadata + `make-harness` console-script entry point
+pixi.toml            dev environment (editable-installs this project)
+plan.md              staged build plan + lessons learned
+dist/                built sdist/wheel tarballs (gitignored, `python -m build`)
+logs/                one JSONL file per session (gitignored)
+memory/              persistent agent memory (gitignored)
 ```

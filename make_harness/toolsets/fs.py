@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from harness.tools import tool
+from make_harness.tools import tool
 
 MAX_LINES = 2000
 

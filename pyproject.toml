@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "make-harness"
+version = "0.1.0"
+description = "A minimal, bottom-up agent harness with pluggable tools, permissions, memory, and context compaction."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "maulikmadhavi", email = "maulikmadhavi@gmail.com" }]
+dependencies = ["requests>=2.34.2,<3"]
+
+[project.scripts]
+make-harness = "make_harness.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["make_harness"]
