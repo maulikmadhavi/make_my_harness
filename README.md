@@ -29,6 +29,21 @@ stage-by-stage execution plan; each stage is one git commit, so
 
 ### Setup and start
 
+Works the same on Windows and Ubuntu/Linux — `pixi.toml` targets both
+`win-64` and `linux-64`. On Ubuntu, install pixi first if you don't have it:
+`curl -fsSL https://pixi.sh/install.sh | sh` (then open a new shell).
+
+**Ubuntu / Linux (bash):**
+
+```bash
+pixi install
+export GROQ_API_KEY="..."        # required
+export TAVILY_API_KEY="..."      # optional, enables web_search (or BRAVE_API_KEY)
+pixi run start
+```
+
+**Windows (PowerShell):**
+
 ```powershell
 pixi install
 $env:GROQ_API_KEY = "..."        # required
@@ -67,6 +82,9 @@ Type: `Reply with exactly: STAGE0-OK`
 - Check the newest file in `logs/`: it must contain one `llm_request` line
   (full message list) and one `llm_response` line (raw API response):
 
+```bash
+cat "$(ls -t logs/*.jsonl | head -1)"
+```
 ```powershell
 Get-Content (Get-ChildItem logs | Sort-Object Name | Select-Object -Last 1).FullName
 ```
@@ -81,7 +99,8 @@ Type, one per line:
    → a `read_file` call, answer `3.12`.
 3. `Create hello.txt containing exactly: Hello from the harness`
    → a `write_file` call (approve with `y`); verify with
-   `Get-Content hello.txt`, then delete the file.
+   `cat hello.txt` (bash) / `Get-Content hello.txt` (PowerShell), then
+   delete the file.
 
 The log must show the full `tool_call` → `tool_result` chain.
 
@@ -122,6 +141,10 @@ automatically; you should not see the error surface in the REPL.
 
 Force a tiny budget so compaction triggers immediately:
 
+```bash
+export HARNESS_TOKEN_BUDGET=800
+pixi run start
+```
 ```powershell
 $env:HARNESS_TOKEN_BUDGET = "800"
 pixi run start
@@ -135,13 +158,23 @@ pixi run start
 3. Check the log for the `compaction` event — `tokens_after` must be
    meaningfully smaller than `tokens_before`:
 
+```bash
+python -c "
+import json, glob
+p = max(glob.glob('logs/*.jsonl'))
+for line in open(p):
+    e = json.loads(line)
+    if e['kind'] == 'compaction':
+        print(e)
+"
+```
 ```powershell
 Get-Content (Get-ChildItem logs | Sort-Object Name | Select-Object -Last 1).FullName |
   ForEach-Object { $_ | ConvertFrom-Json } | Where-Object kind -eq "compaction"
 ```
 
-Unset the budget afterwards: `Remove-Item Env:HARNESS_TOKEN_BUDGET`
-(default is 60000).
+Unset the budget afterwards: `unset HARNESS_TOKEN_BUDGET` (bash) /
+`Remove-Item Env:HARNESS_TOKEN_BUDGET` (PowerShell). Default is 60000.
 
 ### Configuration reference
 

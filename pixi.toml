@@ -2,7 +2,7 @@
 authors = ["maulikmadhavi <maulikmadhavi@gmail.com>"]
 channels = ["conda-forge"]
 name = "make_harness"
-platforms = ["win-64"]
+platforms = ["win-64", "linux-64"]
 version = "0.1.0"
 
 [tasks]

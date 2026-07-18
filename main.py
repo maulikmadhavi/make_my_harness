@@ -1,6 +1,7 @@
 """Interactive REPL entry point for the harness."""
 
 import os
+import platform
 
 # Importing a toolset registers its tools with the shared registry.
 import harness.toolsets.fs  # noqa: F401
@@ -16,7 +17,8 @@ from harness.tools import registry
 
 SYSTEM_PROMPT = (
     "You are a helpful coding agent running in a minimal local harness on the user's "
-    f"machine (Windows, working directory: {os.getcwd()}). "
+    f"machine ({platform.system()}, working directory: {os.getcwd()}). "
+    "Use shell commands appropriate for this OS. "
     "Use your tools to read/write files and run commands when the task needs it. "
     "If a tool returns an error, report it to the user honestly — never invent a "
     "result you did not get from a tool. Keep answers concise."
