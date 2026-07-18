@@ -6,6 +6,7 @@ import os
 import harness.toolsets.fs  # noqa: F401
 import harness.toolsets.shell  # noqa: F401
 import harness.toolsets.web  # noqa: F401
+from harness.context import compact
 from harness.llm import LLMClient
 from harness.toolsets.memory import memory_index
 from harness.log import RunLog
@@ -50,6 +51,7 @@ def main():
         log.event("user_message", content=user)
         messages.append({"role": "user", "content": user})
         try:
+            messages = compact(messages, llm, log)
             answer = run_turn(llm, registry, policy, log, messages)
             print(f"\nagent > {answer}")
         except Exception as e:

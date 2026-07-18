@@ -59,11 +59,19 @@ One commit per stage.
   into the system prompt at REPL start (progressive disclosure).
 - Verify: save a fact, restart the REPL, agent recalls it.
 
-### [ ] Stage 5 — Context compaction
+### [x] Stage 5 — Context compaction
 - `harness/context.py`: token estimate (chars/4); over budget →
-  1) stub old tool results, 2) summarize the older half via one LLM call.
-  Keep system prompt + recent turns intact. Log a `compaction` event.
-- Verify: long session triggers compaction; agent still answers from summary.
+  1) stub tool results outside the recent window,
+  2) summarize the older part via one LLM call,
+  3) last resort: stub recent tool results too.
+  System prompt is never touched; summaries never split a tool_call/result
+  pair. Budget configurable via `HARNESS_TOKEN_BUDGET` (default 60k).
+- Learned live: without step 3, a conversation shorter than the protected
+  recent window could never be compacted — one huge file read would blow
+  the budget with compaction logging "success" while doing nothing.
+- Verified: offline unit tests (stub path, summarize path, pairing safety)
+  + live session with an 800-token budget (1350 → 368 tokens, agent still
+  answered the follow-up correctly).
 
 ### [ ] Stage 6 — Later (out of initial scope)
 Markdown skill packages (`skills/<name>/SKILL.md` + `load_skill` tool),
