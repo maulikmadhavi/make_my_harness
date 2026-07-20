@@ -73,6 +73,7 @@ class LLMClient:
         msg = raw["choices"][0]["message"]
         return {
             "content": msg.get("content"),
+            "reasoning": msg.get("reasoning"),
             "tool_calls": msg.get("tool_calls") or [],
             "usage": raw.get("usage", {}),
             "raw": raw,

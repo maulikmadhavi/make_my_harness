@@ -10,6 +10,13 @@ One commit per stage.
 > `feedback_/feedback_consolidated.md` for the fact-checked reflection —
 > what those reviews got right, where they were already out of date, and
 > the reasoning behind what's kept vs. cut below.
+>
+> Stages 14–23 (2026-07-20) rebuild the REPL as a full-screen TUI with
+> collapsible reasoning blocks and a scrollable transcript, user-requested
+> and scoped via a dedicated architecture review (a Plan agent verified
+> every prompt_toolkit API against the installed version rather than
+> assuming). See design principle 5's note below for the one deliberate
+> exception this introduces.
 
 ## Design principles
 
@@ -17,7 +24,17 @@ One commit per stage.
 2. Log everything as JSONL from day one — full session replay from `logs/*.jsonl`.
 3. No module exists before the stage that needs it. Nothing speculative.
 4. Messages stay plain OpenAI-format dicts. Native tool calling only — no text parsing.
-5. Sync code only.
+5. Sync code only, except: one background worker thread bridges the
+   full-screen TUI (Stage 20) to the synchronous `run_turn()` call — the
+   first and only use of `threading` in this codebase, and a deliberate,
+   narrated exception rather than a silent departure. `run_turn`,
+   `compact`, and `Policy.check` all stay plain synchronous functions;
+   only the *scheduling* around them is threaded, via a single direct
+   `on_event` callback (Stage 15) — not a pub/sub bus with multiple
+   subscribers. See the note on "Deliberately NOT built: event bus"
+   below: that rejection's premise (nothing needs to react mid-flight)
+   no longer holds for this one path, though the rejection of a general
+   multi-subscriber bus still stands.
 
 ## Stages
 
@@ -329,6 +346,24 @@ pluggably *if and when* the first slash command is added, not before" —
   actually gone); confirmed exactly one `command` event with
   `name: clear` in the session's JSONL log.
 
+### [x] Stage 14 — `llm.py` returns the model's `reasoning`
+User-requested 2026-07-20, first piece of a 10-stage full-screen TUI
+rewrite (Stages 14–23) adding collapsible reasoning blocks and a
+scrollable transcript. Groq's `openai/gpt-oss-120b` already returns a
+`reasoning` field in `message` alongside `content` — verified live in a
+session log — but `LLMClient.complete()` discarded it entirely.
+- `msg.get("reasoning")` added to `complete()`'s return dict, `None`
+  when absent (model/backend-dependent — degrades gracefully). The
+  salvage path's hand-built synthetic `raw` dict (Groq `tool_use_failed`
+  recovery) has no `reasoning` key at all; `.get()` degrades to `None`
+  there too rather than `KeyError`ing.
+- Verified: 4 new offline tests (91 total, `tests/test_llm.py`) —
+  reasoning present/absent, absent on a tool-call response, and the
+  salvage-path degradation case (stubbing a `tool_use_failed` 400 end to
+  end, not just `_salvage_tool_call()` in isolation like
+  `test_llm_salvage.py` already does). Live smoke: real Groq call,
+  `result["reasoning"]` populated with the actual chain-of-thought text.
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).
@@ -339,7 +374,12 @@ pluggably *if and when* the first slash command is added, not before" —
   an event mid-flight (every current consumer of "things that happened" —
   console output, the JSONL log — is a direct call, not a subscriber).
   Revisit only if a concrete subscriber use case shows up, not as an
-  architecture-first move.
+  architecture-first move. (Update 2026-07-20: Stage 15 adds a single
+  direct `on_event` callback from `run_turn()` so the TUI can react to
+  tool calls/reasoning mid-turn instead of only after the fact via the
+  JSONL log — this is one callback, not pub/sub with multiple
+  subscribers, so the rejection of a *general* event bus still stands.
+  See design principle 5.)
 - Plugin system, middleware chain, state machine, workflow engine, async —
   still deferred, not rejected. The JSONL logger and the policy gate are
   the seams where these can bolt on later without a rewrite.
