@@ -364,6 +364,35 @@ session log — but `LLMClient.complete()` discarded it entirely.
   `test_llm_salvage.py` already does). Live smoke: real Groq call,
   `result["reasoning"]` populated with the actual chain-of-thought text.
 
+### [x] Stage 15 — `loop.py` gains an `on_event` hook
+`run_turn()` now takes an optional `on_event(kind, **fields)` kwarg. When
+supplied, it's called at every point the function would otherwise
+`print()` a live trace line (`tool_call`, `short_circuit`,
+`tool_result` with `outcome="executed"|"denied"`), plus a `reasoning`
+event once per step, unconditionally — even on steps with no reasoning
+text (`text=None`) — so a consumer building a parallel `reasoning_events`
+list gets exactly one entry per step, position-matchable against
+assistant messages. When `on_event` is `None` (the default, and every
+one of the 87 pre-existing call sites including `cli.py`'s), behavior is
+byte-for-byte identical to before this stage: same prints, same return
+contract, nothing new evaluated.
+- This is the single, narrated exception to "Sync code only" and the
+  event-bus rejection described in design principle 5 — one direct
+  callback, not pub/sub.
+- Verified: 7 new offline tests (98 total) — default path still prints
+  (via `capsys`), supplying `on_event` suppresses those same prints
+  entirely, the reasoning event fires once per step including the
+  `text=None` case, exact event kinds/order/fields for a tool-call step
+  (`reasoning` → `tool_call` → `tool_result` → `reasoning`), the
+  short-circuit event, and a new `DenyAll` fake policy proving the
+  denial path's event too (no prior test covered a denial). `ScriptedLLM`
+  extended to pass through an optional `reasoning` fixture field,
+  defaulting to `None` — the 91 tests already using it without that
+  field are untouched. Live smoke: a real Groq call with a print-based
+  `on_event`, confirming real reasoning text at both the tool-call step
+  and the final-answer step, in the exact order
+  `reasoning → tool_call → tool_result → reasoning`.
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).
