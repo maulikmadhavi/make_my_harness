@@ -3,6 +3,7 @@
 import argparse
 import os
 import platform
+import sys
 
 # Importing a toolset registers its tools with the shared registry.
 import make_harness.toolsets.fs  # noqa: F401
@@ -30,6 +31,12 @@ SYSTEM_PROMPT = (
 
 
 def repl():
+    if not sys.stdin.isatty():
+        # Piped input: decode as UTF-8 and swallow a leading BOM —
+        # PowerShell 5.1 pipes one in, and under the default cp1252
+        # decoding 'exit' arrives as 'ï»¿exit' and misses the exit check
+        # (found live: the model politely said goodbye instead).
+        sys.stdin.reconfigure(encoding="utf-8-sig", errors="replace")
     llm = LLMClient()
     log = RunLog()
     policy = Policy()

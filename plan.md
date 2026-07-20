@@ -222,6 +222,10 @@ Stages 9–10, which stay gated on their own conditions.
 - Learned live: checking the raw mention before the punctuation-stripped
   one made `@a.py.` resolve differently on Windows (ignores trailing
   dots) than Linux — stripped-first keeps platforms identical.
+- Learned live: PowerShell 5.1 pipes stdin with a UTF-8 BOM; under
+  cp1252 decoding, piped `exit` arrived as `ï»¿exit`, missed the exit
+  check, and the model politely said goodbye instead of the REPL
+  quitting. Piped (non-TTY) stdin is now reconfigured to `utf-8-sig`.
 - Verified: 11 new offline tests (45 total); live smoke where the model
   answered from an attached `@pixi.toml` with zero tool calls.
 
