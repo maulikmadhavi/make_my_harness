@@ -7,7 +7,14 @@ LLM round-trips. Every request, response, tool call and result is logged.
 import json
 
 
+SHORT_CIRCUIT_RESULT = (
+    "[not executed: identical to your previous call — the result would be "
+    "unchanged; adjust your arguments or approach]"
+)
+
+
 def run_turn(llm, registry, policy, log, messages, max_steps=15):
+    last_executed = None  # (name, canonical args) of the last call actually run
     for step in range(max_steps):
         log.event("llm_request", step=step, messages=messages)
         resp = llm.complete(messages, tools=registry.schemas() or None)
@@ -33,15 +40,26 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15):
             else:
                 print(f"  → {name}({json.dumps(args, ensure_ascii=False)[:200]})")
                 log.event("tool_call", step=step, tool=name, args=args, id=tc["id"])
-                verdict = "deny" if interrupted else policy.check(name, args)
-                log.event("permission", step=step, tool=name, verdict=verdict)
-                if verdict == "allow":
-                    result = registry.execute(name, args)
-                    print(f"  ← {len(result)} chars")
+                signature = (name, json.dumps(args, sort_keys=True))
+                if signature == last_executed:
+                    # The model repeated its previous call verbatim — don't
+                    # re-execute; nudge it instead. The nudge must BE the tool
+                    # result (not a floating system message) so the
+                    # tool_call/tool pairing the API requires stays intact.
+                    result = SHORT_CIRCUIT_RESULT
+                    print("  ← short-circuited (identical repeat)")
+                    log.event("short_circuit", step=step, tool=name, id=tc["id"])
                 else:
-                    result = "Denied by user."
-                    print("  ← denied")
-                    interrupted = True
+                    verdict = "deny" if interrupted else policy.check(name, args)
+                    log.event("permission", step=step, tool=name, verdict=verdict)
+                    if verdict == "allow":
+                        result = registry.execute(name, args)
+                        last_executed = signature
+                        print(f"  ← {len(result)} chars")
+                    else:
+                        result = "Denied by user."
+                        print("  ← denied")
+                        interrupted = True
             log.event("tool_result", step=step, tool=name, id=tc["id"], result=result[:2000])
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
