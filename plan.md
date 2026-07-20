@@ -442,6 +442,40 @@ special-casing), and an `answer` block for the final content-only step.
   `build_blocks()`, confirming the pure model handles the harness's
   actual output shape, not just hand-built fixtures.
 
+### [x] Stage 18 — `tui/render.py`: pure `Block` → `FormattedText`
+Only imports `prompt_toolkit.formatted_text` — no `Application`/`Layout`.
+Terminal-width wrapping of long lines is deliberately left to the
+eventual `Window`'s `wrap_lines=True` (Stage 19); this module only emits
+real line breaks (block boundaries, the reasoning header/body split, a
+reasoning text's own embedded newlines) and lets the layer that actually
+knows the terminal width handle the rest.
+- Pinned exact strings: `▸ thinking (N chars, ~T tokens)` collapsed,
+  `▾ thinking (N chars)` + a 4-space-indented body line per natural
+  newline in the text when expanded. Token estimate is the same
+  chars//4 heuristic `context.py` already uses for its own budget math,
+  inlined locally rather than imported, to keep `tui/` decoupled from
+  context-management internals.
+- Tool blocks render `→ name(args)` (args raw string, truncated to 200
+  chars — the raw string, not a re-parsed-and-re-serialized dict, since
+  the raw string is what the model actually emitted and re-parsing
+  risks failing on already-repaired malformed JSON) + `← <full result
+  text>`, styled yellow when the text is exactly `DENIED_RESULT` or
+  `SHORT_CIRCUIT_RESULT` (both now named constants in `loop.py` — the
+  denial string was an inline literal before this stage), dim
+  otherwise. Showing the full result rather than just a length, unlike
+  the plain REPL's `← N chars`, is a deliberate improvement this
+  rewrite enables: "tool/answer/user blocks always render in full,"
+  since long output is handled by scrolling, not folding.
+- The focused block gets a `> ` gutter marker (vs. two spaces) so
+  keyboard navigation (Stage 19+) has a visible target.
+- Verified: 16 new offline tests (129 total) — exact pinned strings for
+  both fold states, a genuine content-hiding assertion for collapsed
+  blocks (the full reasoning text does not appear anywhere in the
+  rendered output, not just a cosmetic collapse), user/answer/tool
+  formatting, all three tool outcomes' styling, args truncation, the
+  focus marker in both states, multi-block ordering, and the empty-list
+  edge case.
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).

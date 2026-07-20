@@ -38,6 +38,7 @@ SHORT_CIRCUIT_RESULT = (
     "[not executed: identical to your previous call — the result would be "
     "unchanged; adjust your arguments or approach]"
 )
+DENIED_RESULT = "Denied by user."
 
 
 def run_turn(llm, registry, policy, log, messages, max_steps=15, on_event=None):
@@ -102,7 +103,7 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15, on_event=None):
                         else:
                             print(dim(f"  ← {len(result)} chars"))
                     else:
-                        result = "Denied by user."
+                        result = DENIED_RESULT
                         if on_event:
                             on_event("tool_result", step=step, tool=name, outcome="denied", result=result)
                         else:
