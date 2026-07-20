@@ -127,7 +127,7 @@ committed.
 - Done 2026-07-20 as four atomic commits (LICENSE, tests, CI, doc fixes);
   19 tests passing via `pixi run test`.
 
-### [ ] Stage 8 — Robustness hardening
+### [x] Stage 8 — Robustness hardening
 Small, high-value fixes for gaps confirmed by reading the actual code
 (see `feedback_/feedback_consolidated.md` §3), built test-first on the
 Stage 7 suite:
@@ -157,6 +157,13 @@ Stage 7 suite:
 - Verify: offline stub-LLM unit tests for all three (deterministic —
   coaxing a live 120B model into repeating itself is not), plus one live
   smoke session confirming nothing regressed.
+- Done 2026-07-20 as three atomic commits (short-circuit, truncation,
+  arg repair), each with its tests; 34 tests passing. Live smoke: full
+  loop round-trip against Groq, read_file executed once, correct answer.
+  Note: the short-circuit signature lives as a local in run_turn — the
+  Stage 10 Session-dataclass trigger ("needs a place to keep
+  last_action_signature") did NOT fire, since the signature only has to
+  survive across steps within one turn, not across turns.
 
 ### [ ] Stage 9 — Local / non-tool-calling model support
 Dual-path LLM adapter: native `tool_calls` when the backend supports them
