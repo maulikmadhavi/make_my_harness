@@ -105,7 +105,7 @@ One commit per stage.
   repo and ran `make-harness` live from an unrelated directory — full
   LLM round-trip succeeded, log file created relative to that directory.
 
-### [ ] Stage 7 — Project hygiene (before behavior changes, not after)
+### [x] Stage 7 — Project hygiene (before behavior changes, not after)
 Ordered first deliberately: per this repo's own karpathy-guidelines
 ("define success criteria, write tests, then make them pass"), Stage 8's
 behavior changes should land with regression coverage already in place —
@@ -124,6 +124,8 @@ committed.
   `openai/gpt-oss-120b` (`llm_providers.py`), but README banners and
   older plan notes still show `llama-3.3-70b-versatile`.
 - Verify: `pytest` passes locally; a pushed commit shows a green check.
+- Done 2026-07-20 as four atomic commits (LICENSE, tests, CI, doc fixes);
+  19 tests passing via `pixi run test`.
 
 ### [ ] Stage 8 — Robustness hardening
 Small, high-value fixes for gaps confirmed by reading the actual code

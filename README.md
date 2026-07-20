@@ -98,7 +98,7 @@ same as any other CLI. Share the `.tar.gz` with someone else and
 ### Running it
 
 ```
-harness REPL — llama-3.3-70b-versatile — logging to logs\20260718_...jsonl
+harness REPL — openai/gpt-oss-120b — logging to logs\20260718_...jsonl
 tools: read_file, write_file, run_command, web_search, http_request, save_memory, read_memory
 you >
 ```
@@ -173,8 +173,12 @@ The log gets a `permission` event with the verdict for every gated call.
      not invent an answer.
 
 Note: Groq occasionally rejects tool calls with a `tool_use_failed` 400
-(llama emits malformed syntax). The adapter salvages or retries these
-automatically; you should not see the error surface in the REPL.
+when a model emits malformed tool syntax (observed live with
+llama-3.3-70b-versatile, the original default model). The adapter salvages
+or retries these automatically; you should not see the error surface in
+the REPL. The current default model is `openai/gpt-oss-120b`
+(`make_harness/llm_providers.py`), which rarely triggers this path — the
+salvage stays because it's harmless and only runs on that specific error.
 
 #### Stage 4 — persistent memory
 
@@ -223,6 +227,17 @@ Get-Content (Get-ChildItem logs | Sort-Object Name | Select-Object -Last 1).Full
 Unset the budget afterwards: `unset HARNESS_TOKEN_BUDGET` (bash) /
 `Remove-Item Env:HARNESS_TOKEN_BUDGET` (PowerShell). Default is 60000.
 
+### Running the tests
+
+```bash
+pixi run test        # or: pixi run pytest -q
+```
+
+The suite covers the pure-logic seams (tool-call salvage, context
+compaction, the tool registry's error handling, memory slugs) with a stub
+LLM — no API key or network needed. CI (`.github/workflows/test.yml`) runs
+the same suite on every push.
+
 ### Configuration reference
 
 | Env var | Purpose | Default |
@@ -245,6 +260,8 @@ make_harness/
   context.py         token budget + compaction
   toolsets/          fs, shell, web, memory tool implementations
   __main__.py        enables `python -m make_harness`
+tests/               pytest suite (offline — stub LLM, no API key needed)
+.github/workflows/   CI: pytest on every push
 main.py              thin shim so `python main.py` still works
 pyproject.toml       build metadata + `make-harness` console-script entry point
 pixi.toml            dev environment (editable-installs this project)
@@ -253,3 +270,7 @@ dist/                built sdist/wheel tarballs (gitignored, `python -m build`)
 logs/                one JSONL file per session (gitignored)
 memory/              persistent agent memory (gitignored)
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
