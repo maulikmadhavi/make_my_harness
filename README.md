@@ -110,8 +110,8 @@ same as any other CLI. Share the `.tar.gz` with someone else and
 ```
 make-harness v0.1.0 — openai/gpt-oss-120b
 log:   logs\20260718_...jsonl
-tools: read_file, write_file, run_command, web_search, http_request, save_memory, read_memory
-@path attaches a file or folder — e.g. @make_harness/llm.py
+tools: read_file, write_file, run_command, load_skill, web_search, http_request, save_memory, read_memory
+@path attaches a file or folder — type @ for a picker (Tab/arrows select)
 type 'exit' or Ctrl+C to quit
 
 you >
@@ -201,7 +201,7 @@ The log gets a `permission` event with the verdict for every gated call.
 #### Stage 3 — web tools
 
 1. `Use http_request to GET https://api.github.com/repos/python/cpython and tell me the star count.`
-   → approve with `y`; expect a plausible star count read from the API.
+   → approve with `Yes`; expect a plausible star count read from the API.
 2. `Search the web for the latest stable Python version.`
    - With `TAVILY_API_KEY`/`BRAVE_API_KEY` set: results with titles + URLs.
    - Without a key: the agent must honestly say search is unavailable —
@@ -222,23 +222,6 @@ salvage stays because it's harmless and only runs on that specific error.
    `memory/favorite-editor...md` appears.
 2. Exit, start a fresh session: `Which editor do I prefer? Check your memory.`
    → a `read_memory` call, answer `VS Code`.
-
-#### Skills — `skills/<name>/SKILL.md`
-
-The banner's `tools:` line includes `load_skill` whenever `skills/`
-contains at least one well-formed skill; the bundled example is
-`skills/commit-messages/`.
-
-1. `I'm about to commit some changes in this repo — load the relevant
-   skill first, then summarize its message-body style in one sentence.`
-   → a `load_skill({"name": "commit-messages"})` call (found via the
-   skills index injected into the system prompt at startup — the agent
-   should not need to be told the skill's exact name or path), then a
-   correct one-sentence summary.
-2. Add your own: create `skills/<name>/SKILL.md` with `---\nname: ...\n
-   description: ...\n---` frontmatter followed by the instructions body,
-   restart the REPL, and it appears in the tools list and system prompt
-   automatically — no code changes needed.
 
 #### Stage 5 — context compaction
 
@@ -279,16 +262,35 @@ Get-Content (Get-ChildItem logs | Sort-Object Name | Select-Object -Last 1).Full
 Unset the budget afterwards: `unset HARNESS_TOKEN_BUDGET` (bash) /
 `Remove-Item Env:HARNESS_TOKEN_BUDGET` (PowerShell). Default is 60000.
 
+#### Stage 12 — skill packages: `skills/<name>/SKILL.md`
+
+The banner's `tools:` line includes `load_skill` whenever `skills/`
+contains at least one well-formed skill; the bundled example is
+`skills/commit-messages/`.
+
+1. `I'm about to commit some changes in this repo — load the relevant
+   skill first, then summarize its message-body style in one sentence.`
+   → a `load_skill({"name": "commit-messages"})` call (found via the
+   skills index injected into the system prompt at startup — the agent
+   should not need to be told the skill's exact name or path), then a
+   correct one-sentence summary.
+2. Add your own: create `skills/<name>/SKILL.md` with `---\nname: ...\n
+   description: ...\n---` frontmatter followed by the instructions body,
+   restart the REPL, and it appears in the tools list and system prompt
+   automatically — no code changes needed.
+
 ### Running the tests
 
 ```bash
 pixi run test        # or: pixi run pytest -q
 ```
 
-The suite covers the pure-logic seams (tool-call salvage, context
-compaction, the tool registry's error handling, memory slugs) with a stub
-LLM — no API key or network needed. CI (`.github/workflows/test.yml`) runs
-the same suite on every push.
+81 tests, all offline (stub LLM, no API key or network needed) covering
+every pure-logic seam: tool-call salvage, context compaction, the tool
+registry's error handling, the agent loop (short-circuiting repeats,
+argument repair), head+tail truncation, memory/skill discovery, the
+`@path` and permission-gate pickers, and a piped-input regression test.
+CI (`.github/workflows/test.yml`) runs the same suite on every push.
 
 ### Configuration reference
 
