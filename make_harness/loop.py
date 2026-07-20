@@ -7,6 +7,24 @@ LLM round-trips. Every request, response, tool call and result is logged.
 import json
 
 
+def _repair_args(arguments):
+    """Best-effort repair of tool-call arguments that didn't parse as JSON:
+    extract the outermost {...} (models sometimes wrap the object in prose
+    or tags). Returns a dict or None.
+
+    Distinct from llm.py's _salvage_tool_call, which recovers whole calls
+    from Groq's tool_use_failed error body — this repairs arguments of a
+    call that the API accepted.
+    """
+    start, end = arguments.find("{"), arguments.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        return json.loads(arguments[start:end + 1])
+    except json.JSONDecodeError:
+        return None
+
+
 SHORT_CIRCUIT_RESULT = (
     "[not executed: identical to your previous call — the result would be "
     "unchanged; adjust your arguments or approach]"
@@ -34,7 +52,14 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15):
             try:
                 args = json.loads(tc["function"]["arguments"] or "{}")
             except json.JSONDecodeError:
-                args = None
+                args = _repair_args(tc["function"]["arguments"])
+                if args is not None:
+                    log.event(
+                        "args_repaired",
+                        step=step,
+                        tool=name,
+                        raw=tc["function"]["arguments"][:500],
+                    )
             if args is None:
                 result = f"Error: unparseable tool arguments: {tc['function']['arguments']!r}"
             else:

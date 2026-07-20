@@ -5,7 +5,7 @@ delivered as the tool result itself so every tool_call id still gets a
 role:"tool" response (the pairing rule the deny path also honors).
 """
 
-from make_harness.loop import SHORT_CIRCUIT_RESULT, run_turn
+from make_harness.loop import SHORT_CIRCUIT_RESULT, _repair_args, run_turn
 from make_harness.tools import Registry
 
 
@@ -140,6 +140,49 @@ def test_argument_key_order_does_not_defeat_the_check():
     ])
     run_turn(llm, reg, AllowAll(), StubLog(), [{"role": "user", "content": "go"}])
     assert calls == [("1", "2")]
+
+
+def test_repair_extracts_object_from_prose():
+    assert _repair_args('Sure! Here are the arguments: {"path": "x.py"}') == {"path": "x.py"}
+
+
+def test_repair_extracts_object_from_tags():
+    assert _repair_args('<args>{"path": "x.py"}</args>') == {"path": "x.py"}
+
+
+def test_repair_gives_up_on_garbage():
+    assert _repair_args("no braces here") is None
+    assert _repair_args("{still: not json}") is None
+    assert _repair_args("}{") is None
+
+
+def test_prose_wrapped_arguments_are_repaired_and_executed():
+    llm = ScriptedLLM([
+        {"tool_calls": [_tc("c1", "probe", 'Sure! {"path": "x.py"}')]},
+        {"content": "done"},
+    ])
+    reg, calls = _make_registry()
+    log = StubLog()
+    messages = [{"role": "user", "content": "go"}]
+    answer = run_turn(llm, reg, AllowAll(), log, messages)
+    assert answer == "done"
+    assert calls == ["x.py"]
+    assert any(kind == "args_repaired" for kind, _ in log.events)
+
+
+def test_unrepairable_arguments_fail_clean():
+    llm = ScriptedLLM([
+        {"tool_calls": [_tc("c1", "probe", "total garbage")]},
+        {"content": "done"},
+    ])
+    reg, calls = _make_registry()
+    messages = [{"role": "user", "content": "go"}]
+    answer = run_turn(llm, reg, AllowAll(), StubLog(), messages)
+    assert answer == "done"
+    assert calls == []
+    tool_results = [m for m in messages if m["role"] == "tool"]
+    assert tool_results[0]["content"].startswith("Error: unparseable tool arguments")
+    assert _pairing_ok(messages)
 
 
 def test_short_circuit_skips_the_permission_prompt():
