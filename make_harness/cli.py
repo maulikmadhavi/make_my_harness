@@ -17,6 +17,7 @@ from make_harness.toolsets.memory import memory_index
 from make_harness.log import RunLog
 from make_harness.loop import run_turn
 from make_harness.policy import Policy
+from make_harness.prompt import make_input
 from make_harness.tools import registry
 from make_harness.ui import bold, cyan, dim, green, red
 
@@ -49,12 +50,13 @@ def repl():
     print(f"{bold(cyan('make-harness'))} {dim('v' + __version__)} — {llm.model}")
     print(dim(f"log:   {log.path}"))
     print(dim(f"tools: {tool_names}"))
-    print(dim("@path attaches a file or folder — e.g. @make_harness/llm.py"))
+    print(dim("@path attaches a file or folder — type @ for a picker (Tab/arrows select)"))
     print(dim("type 'exit' or Ctrl+C to quit"))
+    read_input = make_input()
 
     while True:
         try:
-            user = input(f"\n{bold(cyan('you >'))} ").strip()
+            user = read_input(f"\n{bold(cyan('you >'))} ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break

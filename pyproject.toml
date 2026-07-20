@@ -10,7 +10,7 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "maulikmadhavi", email = "maulikmadhavi@gmail.com" }]
-dependencies = ["requests>=2.34.2,<3"]
+dependencies = ["requests>=2.34.2,<3", "prompt_toolkit>=3.0,<4"]
 
 [project.scripts]
 make-harness = "make_harness.cli:main"
