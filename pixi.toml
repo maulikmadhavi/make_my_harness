@@ -7,10 +7,12 @@ version = "0.1.0"
 
 [tasks]
 start = "make-harness"
+test = "pytest"
 
 [dependencies]
 python = "==3.12"
 pip = ">=26.1.2,<27"
+pytest = ">=8"
 
 [pypi-dependencies]
 # editable install of this project itself: registers the `make-harness`
