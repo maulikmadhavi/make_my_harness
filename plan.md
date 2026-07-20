@@ -393,6 +393,22 @@ contract, nothing new evaluated.
   and the final-answer step, in the exact order
   `reasoning → tool_call → tool_result → reasoning`.
 
+### [x] Stage 16 — `policy.py`: `_ask` becomes the only I/O seam
+`Policy.check()` had one stray `print()` (the `[permission] name(args)`
+description) outside its `_ask(prompt_text, choices)` call — harmless
+for the plain REPL, but it would corrupt a full-screen TUI's alternate
+screen buffer, and a TUI override of `_ask` alone couldn't suppress it.
+Folded into one `prompt_text` string (`"  [permission] ...\n  allow? "`)
+passed to `_ask`, so overriding `_ask` (Stage 20) is now a total
+override — nothing in `Policy` writes to stdout on its own.
+- Verified: 2 new offline tests (100 total) — zero stdout writes via
+  `capsys` when `_ask` is stubbed, and the prompt text actually reaching
+  `_ask` contains the tool name, its args, and `allow?`. Live smoke: the
+  real CLI's non-TTY fallback, confirming the merged prompt still reads
+  correctly as one description line + `allow?` (exactly one newline
+  between them, no stray blank line left over) and the file write still
+  completes end to end.
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).

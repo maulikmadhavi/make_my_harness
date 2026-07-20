@@ -65,3 +65,29 @@ def test_eof_and_keyboard_interrupt_deny_safely():
         policy = Policy()
         policy._ask = _raise(exc)
         assert policy.check("write_file", {}) == "deny"
+
+
+def test_ask_is_the_only_io_seam(capsys):
+    # A stubbed _ask means check() must not print anything itself --
+    # the permission description used to be a separate print() call
+    # that a TUI override (Stage 20) couldn't have suppressed.
+    policy = _make_policy(["yes"])
+    policy.check("write_file", {"path": "x.py"})
+    assert capsys.readouterr().out == ""
+
+
+def test_ask_receives_the_full_prompt_context():
+    captured = {}
+
+    def ask(prompt_text, choices):
+        captured["prompt_text"] = prompt_text
+        captured["choices"] = choices
+        return "yes"
+
+    policy = Policy()
+    policy._ask = ask
+    policy.check("write_file", {"path": "x.py"})
+    assert "write_file" in captured["prompt_text"]
+    assert "x.py" in captured["prompt_text"]
+    assert "allow?" in captured["prompt_text"]
+    assert captured["choices"] == CHOICES

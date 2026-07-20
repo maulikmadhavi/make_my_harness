@@ -10,6 +10,11 @@ in a plain fallback prompt otherwise):
            permanent counterpart to "always")
 A denial — one-off or permanent — is returned to the model as the tool
 result so it can adapt instead of crashing.
+
+_ask() is Policy's only I/O seam — everything printed or read lives
+inside that one call, so a caller (the TUI, Stage 20) can override it
+completely by swapping self._ask, with no risk of a stray print()
+corrupting a full-screen render.
 """
 
 import json
@@ -40,9 +45,11 @@ class Policy:
             return "allow"
         if name in self.always_deny:
             return "deny"
-        print(yellow(f"  [permission] {name}({json.dumps(args, ensure_ascii=False)[:200]})"))
+        prompt_text = yellow(
+            f"  [permission] {name}({json.dumps(args, ensure_ascii=False)[:200]})\n  allow? "
+        )
         try:
-            choice = self._ask(yellow("  allow? "), CHOICES)
+            choice = self._ask(prompt_text, CHOICES)
         except (EOFError, KeyboardInterrupt):
             return "deny"
         if choice == "always":
