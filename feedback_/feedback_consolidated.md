@@ -107,7 +107,9 @@ Checked directly against current source, not inferred from the reviews:
 - **Slash commands as a plugin system** (ChatGPT/DeepSeek) — there are no
   slash commands in this REPL at all yet (only `exit`/`quit`). Nothing to
   refactor. Worth designing pluggably *if and when* the first slash command
-  is added, not before.
+  is added, not before. (Update 2026-07-20: `/clear` shipped as plan.md
+  Stage 13 — `make_harness/commands.py` is exactly that pluggable
+  registry, built the moment the trigger became real.)
 
 ## 5. Gaps none of the four reviewers could see
 

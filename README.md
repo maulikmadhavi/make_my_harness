@@ -30,6 +30,9 @@ stage-by-stage execution plan; each stage is one git commit, so
   for the bundled example.
 - **Context compaction**: long conversations are squeezed back under a
   token budget automatically.
+- **Slash commands**: `/clear` resets the conversation (keeping the
+  system prompt and memory/skills index); `make_harness/commands.py` is a
+  small registry, so adding another command doesn't touch the REPL loop.
 
 ## User guide
 
@@ -112,6 +115,7 @@ make-harness v0.1.0 — openai/gpt-oss-120b
 log:   logs\20260718_...jsonl
 tools: read_file, write_file, run_command, load_skill, web_search, http_request, save_memory, read_memory
 @path attaches a file or folder — type @ for a picker (Tab/arrows select)
+/clear resets the conversation (memory/skills index kept)
 type 'exit' or Ctrl+C to quit
 
 you >
@@ -140,11 +144,16 @@ you >
   for the rest of the session, `Deny` to permanently block it for the
   session, the counterpart to `Always`). Any denial (`No` or `Deny`) ends
   the turn immediately and hands control back to you.
+- **`/clear`**: resets the conversation history back to just the system
+  prompt — the memory index and skills index folded into it survive, only
+  the back-and-forth is dropped. An unrecognized `/command` prints a
+  short error listing what's actually available instead of being sent to
+  the model.
 - `exit`, `quit`, or Ctrl+C ends the session.
 - Every session writes one JSONL file to `logs/` (created in the current
   working directory); each line is one event (`llm_request`,
   `llm_response`, `tool_call`, `tool_result`, `permission`, `compaction`,
-  `error`, `done`).
+  `command`, `error`, `done`).
 - `make-harness --version` prints the installed version;
   `make-harness --help` shows CLI usage.
 
@@ -279,18 +288,32 @@ contains at least one well-formed skill; the bundled example is
    restart the REPL, and it appears in the tools list and system prompt
    automatically — no code changes needed.
 
+#### Stage 13 — `/clear`
+
+1. `What is 2+2? Answer with just the number.` → `4`.
+2. `/clear` → prints `Conversation cleared — system prompt and
+   memory/skills index kept.`
+3. `Did I ask you a math question earlier in this conversation? Answer
+   yes or no.` → `No` — the history is really gone, not just hidden.
+4. `/nope` → an `Unknown command: /nope` error listing what's actually
+   available, instead of being sent to the model.
+
+The log gets a `command` event (`name`, `output`) for every recognized
+slash command; unrecognized ones aren't logged.
+
 ### Running the tests
 
 ```bash
 pixi run test        # or: pixi run pytest -q
 ```
 
-81 tests, all offline (stub LLM, no API key or network needed) covering
+87 tests, all offline (stub LLM, no API key or network needed) covering
 every pure-logic seam: tool-call salvage, context compaction, the tool
 registry's error handling, the agent loop (short-circuiting repeats,
-argument repair), head+tail truncation, memory/skill discovery, the
-`@path` and permission-gate pickers, and a piped-input regression test.
-CI (`.github/workflows/test.yml`) runs the same suite on every push.
+argument repair), head+tail truncation, memory/skill discovery, slash
+commands, the `@path` and permission-gate pickers, and a piped-input
+regression test. CI (`.github/workflows/test.yml`) runs the same suite
+on every push.
 
 ### Configuration reference
 
@@ -306,6 +329,7 @@ CI (`.github/workflows/test.yml`) runs the same suite on every push.
 ```
 make_harness/
   cli.py             argparse entry point + the REPL loop
+  commands.py        /clear and other slash commands (registry, not sent to the LLM)
   prompt.py          @ pop-up file/folder picker (prompt_toolkit)
   mentions.py        @path mention expansion (file/folder attachments)
   ui.py              ANSI styling helpers (stdlib, NO_COLOR-aware)

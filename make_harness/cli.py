@@ -11,6 +11,7 @@ import make_harness.toolsets.shell  # noqa: F401
 import make_harness.toolsets.skills  # noqa: F401
 import make_harness.toolsets.web  # noqa: F401
 from make_harness import __version__
+from make_harness import commands
 from make_harness.context import compact
 from make_harness.llm import LLMClient
 from make_harness.mentions import expand_mentions
@@ -56,6 +57,7 @@ def repl():
     print(dim(f"log:   {log.path}"))
     print(dim(f"tools: {tool_names}"))
     print(dim("@path attaches a file or folder — type @ for a picker (Tab/arrows select)"))
+    print(dim("/clear resets the conversation (memory/skills index kept)"))
     print(dim("type 'exit' or Ctrl+C to quit"))
     read_input = make_input()
 
@@ -69,6 +71,10 @@ def repl():
             continue
         if user.lower() in ("exit", "quit"):
             break
+        if user.startswith("/"):
+            messages, output = commands.run(user, messages, log)
+            print(dim(output))
+            continue
 
         expanded, attached = expand_mentions(user)
         for mention in attached:

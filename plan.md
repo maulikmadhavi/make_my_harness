@@ -303,6 +303,32 @@ it was asked for directly.
   `load_skill({"name": "commit-messages"})` unprompted and correctly
   summarized its message-body convention.
 
+### [x] Stage 13 — Slash commands: `/clear`
+User-requested 2026-07-20. `feedback_consolidated.md` §4 had explicitly
+deferred a pluggable slash-command design with "worth designing
+pluggably *if and when* the first slash command is added, not before" —
+`/clear` is that first command, so the trigger is now real.
+- `make_harness/commands.py`: a small registry mirroring `tools.py`'s
+  `@tool` decorator — `@command` registers a function under its name;
+  `run(text, messages, log)` dispatches, logs a single `command` event
+  (`name`, `output`) for any recognized command, and returns a helpful
+  `Unknown command: /x — available: ...` message (unlogged) otherwise.
+  Adding a second command means writing one function, not another
+  branch in `cli.py`.
+- `clear(messages)` resets history to `[messages[0]]` — the system
+  message already has the memory/skills index folded in (Stages 4/12),
+  so nothing needs re-injecting, only the back-and-forth is dropped.
+  Checked in `cli.py` before `@`-mention expansion, so `/clear` itself
+  is never sent to the model or scanned for mentions.
+- Verified: 6 new offline tests (87 total) — history reset, the
+  `command` log event, trailing-argument tolerance (`/clear please`),
+  unknown-command fallback (untouched messages, no log entry, lists
+  what's available), and a bare `/` edge case. Live smoke: the real CLI
+  as a subprocess — asked "what is 2+2", got `4`; `/clear`; asked
+  whether it remembered the math question, got `No` (not just hidden,
+  actually gone); confirmed exactly one `command` event with
+  `name: clear` in the session's JSONL log.
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).
