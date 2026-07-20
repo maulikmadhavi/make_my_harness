@@ -6,6 +6,7 @@ import os
 import requests
 
 from make_harness.tools import tool
+from make_harness.toolsets import truncate
 
 MAX_OUTPUT = 10_000
 
@@ -48,7 +49,4 @@ def http_request(method: str, url: str, headers_json: str = "", body_json: str =
     headers = json.loads(headers_json) if headers_json else {}
     body = json.loads(body_json) if body_json else None
     r = requests.request(method.upper(), url, headers=headers, json=body, timeout=30)
-    text = r.text
-    if len(text) > MAX_OUTPUT:
-        text = text[:MAX_OUTPUT] + f"\n[truncated {len(text) - MAX_OUTPUT} chars]"
-    return f"status: {r.status_code}\n{text}"
+    return f"status: {r.status_code}\n{truncate(r.text, MAX_OUTPUT)}"
