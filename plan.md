@@ -210,9 +210,11 @@ its trigger is real, per this project's own simplicity principle.
 - **Declarative YAML/TOML config** — trigger: Stage 9 lands and there are
   2+ real providers to choose between. Building a config file to select
   between one provider is solving a problem that doesn't exist yet.
-- Markdown skill packages (`skills/<name>/SKILL.md` + `load_skill` tool),
-  subagents for context isolation, session resume from a JSONL log — no
+- Subagents for context isolation, session resume from a JSONL log — no
   new trigger information since these were first deferred; still v2+.
+  (Markdown skill packages, the other item originally listed here,
+  shipped in Stage 12 — the trigger became real when the user asked for
+  it directly.)
 
 ### [x] Stage 11 — REPL UX: ANSI colors + @path mentions
 User-requested 2026-07-20; done out of numeric order — independent of
@@ -271,6 +273,35 @@ Stages 9–10, which stay gated on their own conditions.
   Groq session requesting two `write_file` calls, answering `always` on
   the first prompt — the second call executed with zero further prompts
   and `policy.always_allow == {"write_file"}`.
+
+### [x] Stage 12 — Skill packages: `skills/<name>/SKILL.md`
+User-requested 2026-07-20. Originally listed under Stage 10 as deferred
+with "no new trigger information"; the trigger became real the moment
+it was asked for directly.
+- `make_harness/toolsets/skills.py`: `discover()` parses
+  `skills/*/SKILL.md` files with `---\nname: ...\ndescription: ...\n---`
+  frontmatter (regex-based — no YAML dependency for two key: value
+  lines) plus a body; malformed files (no frontmatter block) are skipped
+  rather than crashing startup. `skills_index()` formats `- name:
+  description` lines. `load_skill(name)` is the `@tool`.
+- Same progressive-disclosure shape as Stage 4 memory: `skills_index()`
+  is injected into the system prompt at REPL startup (`cli.py`) so the
+  agent knows what's available without spending a tool call to check;
+  `load_skill` fetches one skill's full body on demand. `load_skill`
+  added to `Policy.AUTO_ALLOW` — it only reads `skills/`, same
+  read-only rationale as `read_memory`.
+  `skills/commit-messages/SKILL.md` ships as the one bundled example —
+  this repo's own atomic-commit and message-body conventions, genuinely
+  useful rather than a placeholder, and doubles as the live-verified
+  fixture.
+- Verified: 8 new offline tests (81 total) — discovery, the folder-name
+  fallback when `name:` is missing, malformed files skipped cleanly,
+  index formatting, `load_skill` found/not-found, and a guard test that
+  the bundled `commit-messages` skill itself stays discoverable. Live
+  smoke: a real Groq session, given only the injected index (no skill
+  name or path mentioned by the user), called
+  `load_skill({"name": "commit-messages"})` unprompted and correctly
+  summarized its message-body convention.
 
 ## Deliberately NOT built
 

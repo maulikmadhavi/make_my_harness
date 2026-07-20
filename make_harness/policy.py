@@ -26,8 +26,9 @@ CHOICES = [
 
 
 class Policy:
-    # save_memory/read_memory only touch the memory/ directory.
-    AUTO_ALLOW = {"read_file", "web_search", "save_memory", "read_memory"}
+    # save_memory/read_memory only touch the memory/ directory; load_skill
+    # only reads from skills/.
+    AUTO_ALLOW = {"read_file", "web_search", "save_memory", "read_memory", "load_skill"}
 
     def __init__(self):
         self.always_allow = set()

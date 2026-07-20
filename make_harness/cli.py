@@ -8,12 +8,14 @@ import sys
 # Importing a toolset registers its tools with the shared registry.
 import make_harness.toolsets.fs  # noqa: F401
 import make_harness.toolsets.shell  # noqa: F401
+import make_harness.toolsets.skills  # noqa: F401
 import make_harness.toolsets.web  # noqa: F401
 from make_harness import __version__
 from make_harness.context import compact
 from make_harness.llm import LLMClient
 from make_harness.mentions import expand_mentions
 from make_harness.toolsets.memory import memory_index
+from make_harness.toolsets.skills import skills_index
 from make_harness.log import RunLog
 from make_harness.loop import run_turn
 from make_harness.policy import Policy
@@ -45,6 +47,9 @@ def repl():
     index = memory_index()
     if index:
         system += "\n\nPersistent memory index (use read_memory for details):\n" + index
+    skills = skills_index()
+    if skills:
+        system += "\n\nAvailable skills (use load_skill for full instructions):\n" + skills
     messages = [{"role": "system", "content": system}]
     tool_names = ", ".join(t["function"]["name"] for t in registry.schemas())
     print(f"{bold(cyan('make-harness'))} {dim('v' + __version__)} — {llm.model}")

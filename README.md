@@ -25,6 +25,9 @@ stage-by-stage execution plan; each stage is one git commit, so
 - **Full session logs**: every LLM request/response, tool call/result and
   permission verdict as JSONL in `logs/` — replayable for debugging.
 - **Persistent memory**: facts survive across sessions via `memory/`.
+- **Skill packages**: markdown instructions in `skills/<name>/SKILL.md`
+  the agent discovers and loads on demand — see `skills/commit-messages/`
+  for the bundled example.
 - **Context compaction**: long conversations are squeezed back under a
   token budget automatically.
 
@@ -220,6 +223,23 @@ salvage stays because it's harmless and only runs on that specific error.
 2. Exit, start a fresh session: `Which editor do I prefer? Check your memory.`
    → a `read_memory` call, answer `VS Code`.
 
+#### Skills — `skills/<name>/SKILL.md`
+
+The banner's `tools:` line includes `load_skill` whenever `skills/`
+contains at least one well-formed skill; the bundled example is
+`skills/commit-messages/`.
+
+1. `I'm about to commit some changes in this repo — load the relevant
+   skill first, then summarize its message-body style in one sentence.`
+   → a `load_skill({"name": "commit-messages"})` call (found via the
+   skills index injected into the system prompt at startup — the agent
+   should not need to be told the skill's exact name or path), then a
+   correct one-sentence summary.
+2. Add your own: create `skills/<name>/SKILL.md` with `---\nname: ...\n
+   description: ...\n---` frontmatter followed by the instructions body,
+   restart the REPL, and it appears in the tools list and system prompt
+   automatically — no code changes needed.
+
 #### Stage 5 — context compaction
 
 Force a tiny budget so compaction triggers immediately:
@@ -294,8 +314,9 @@ make_harness/
   loop.py            the agent loop
   policy.py          permission gate
   context.py         token budget + compaction
-  toolsets/          fs, shell, web, memory tool implementations
+  toolsets/          fs, shell, web, memory, skills tool implementations
   __main__.py        enables `python -m make_harness`
+skills/              SKILL.md packages the agent discovers and can load
 tests/               pytest suite (offline — stub LLM, no API key needed)
 .github/workflows/   CI: pytest on every push
 main.py              thin shim so `python main.py` still works
