@@ -11,6 +11,7 @@ import make_harness.toolsets.web  # noqa: F401
 from make_harness import __version__
 from make_harness.context import compact
 from make_harness.llm import LLMClient
+from make_harness.mentions import expand_mentions
 from make_harness.toolsets.memory import memory_index
 from make_harness.log import RunLog
 from make_harness.loop import run_turn
@@ -41,6 +42,7 @@ def repl():
     print(f"{bold(cyan('make-harness'))} {dim('v' + __version__)} — {llm.model}")
     print(dim(f"log:   {log.path}"))
     print(dim(f"tools: {tool_names}"))
+    print(dim("@path attaches a file or folder — e.g. @make_harness/llm.py"))
     print(dim("type 'exit' or Ctrl+C to quit"))
 
     while True:
@@ -54,8 +56,11 @@ def repl():
         if user.lower() in ("exit", "quit"):
             break
 
-        log.event("user_message", content=user)
-        messages.append({"role": "user", "content": user})
+        expanded, attached = expand_mentions(user)
+        for mention in attached:
+            print(dim(f"  @ attached {mention}"))
+        log.event("user_message", content=user, attachments=attached)
+        messages.append({"role": "user", "content": expanded})
         try:
             messages = compact(messages, llm, log)
             answer = run_turn(llm, registry, policy, log, messages)
