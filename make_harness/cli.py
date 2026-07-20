@@ -16,6 +16,7 @@ from make_harness.log import RunLog
 from make_harness.loop import run_turn
 from make_harness.policy import Policy
 from make_harness.tools import registry
+from make_harness.ui import bold, cyan, dim, green, red
 
 SYSTEM_PROMPT = (
     "You are a helpful coding agent running in a minimal local harness on the user's "
@@ -37,13 +38,14 @@ def repl():
         system += "\n\nPersistent memory index (use read_memory for details):\n" + index
     messages = [{"role": "system", "content": system}]
     tool_names = ", ".join(t["function"]["name"] for t in registry.schemas())
-    print(f"harness REPL — {llm.model} — logging to {log.path}")
-    print(f"tools: {tool_names}")
-    print("type 'exit' or Ctrl+C to quit")
+    print(f"{bold(cyan('make-harness'))} {dim('v' + __version__)} — {llm.model}")
+    print(dim(f"log:   {log.path}"))
+    print(dim(f"tools: {tool_names}"))
+    print(dim("type 'exit' or Ctrl+C to quit"))
 
     while True:
         try:
-            user = input("\nyou > ").strip()
+            user = input(f"\n{bold(cyan('you >'))} ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -57,10 +59,10 @@ def repl():
         try:
             messages = compact(messages, llm, log)
             answer = run_turn(llm, registry, policy, log, messages)
-            print(f"\nagent > {answer}")
+            print(f"\n{bold(green('agent >'))} {answer}")
         except Exception as e:
             log.event("error", error=f"{type(e).__name__}: {e}")
-            print(f"[error] {e}")
+            print(red(f"[error] {e}"))
 
 
 def main():

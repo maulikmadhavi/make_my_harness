@@ -8,6 +8,8 @@ instead of crashing.
 
 import json
 
+from make_harness.ui import yellow
+
 
 class Policy:
     # save_memory/read_memory only touch the memory/ directory.
@@ -19,10 +21,10 @@ class Policy:
     def check(self, name, args):
         if name in self.AUTO_ALLOW or name in self.always:
             return "allow"
-        print(f"  [permission] {name}({json.dumps(args, ensure_ascii=False)[:200]})")
+        print(yellow(f"  [permission] {name}({json.dumps(args, ensure_ascii=False)[:200]})"))
         while True:
             try:
-                answer = input("  allow? y = once / n = deny / a = always: ").strip().lower()
+                answer = input(yellow("  allow? y = once / n = deny / a = always: ")).strip().lower()
             except EOFError:
                 return "deny"
             if answer in ("y", "yes"):

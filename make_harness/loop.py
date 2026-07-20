@@ -6,6 +6,8 @@ LLM round-trips. Every request, response, tool call and result is logged.
 
 import json
 
+from make_harness.ui import dim, yellow
+
 
 def _repair_args(arguments):
     """Best-effort repair of tool-call arguments that didn't parse as JSON:
@@ -63,7 +65,7 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15):
             if args is None:
                 result = f"Error: unparseable tool arguments: {tc['function']['arguments']!r}"
             else:
-                print(f"  → {name}({json.dumps(args, ensure_ascii=False)[:200]})")
+                print(dim(f"  → {name}({json.dumps(args, ensure_ascii=False)[:200]})"))
                 log.event("tool_call", step=step, tool=name, args=args, id=tc["id"])
                 signature = (name, json.dumps(args, sort_keys=True))
                 if signature == last_executed:
@@ -72,7 +74,7 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15):
                     # result (not a floating system message) so the
                     # tool_call/tool pairing the API requires stays intact.
                     result = SHORT_CIRCUIT_RESULT
-                    print("  ← short-circuited (identical repeat)")
+                    print(yellow("  ← short-circuited (identical repeat)"))
                     log.event("short_circuit", step=step, tool=name, id=tc["id"])
                 else:
                     verdict = "deny" if interrupted else policy.check(name, args)
@@ -80,10 +82,10 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15):
                     if verdict == "allow":
                         result = registry.execute(name, args)
                         last_executed = signature
-                        print(f"  ← {len(result)} chars")
+                        print(dim(f"  ← {len(result)} chars"))
                     else:
                         result = "Denied by user."
-                        print("  ← denied")
+                        print(yellow("  ← denied"))
                         interrupted = True
             log.event("tool_result", step=step, tool=name, id=tc["id"], result=result[:2000])
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
