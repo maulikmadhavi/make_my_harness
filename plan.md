@@ -476,6 +476,52 @@ knows the terminal width handle the rest.
   focus marker in both states, multi-block ordering, and the empty-list
   edge case.
 
+### [x] Stage 19 — `tui/app.py`: layout + scrolling skeleton (static content)
+No live turns or threading yet — proves the layout, scrolling, and
+fold/focus interactions against a static demo block list before Stage 20
+adds real complexity on top. `TranscriptState` (blocks, per-block
+`folds`, `focused_index`) is pure Python, no prompt_toolkit import, so
+it's directly unit-testable. `build_application(state, input=None,
+output=None)` wires a single scrollable `Window` (`FormattedTextControl`
+driven by `state.render`, `wrap_lines=True`) with global key bindings —
+Up/Down move focus, Space/Enter toggle fold, PageUp/PageDown reuse
+prompt_toolkit's own bundled `scroll_page_up`/`scroll_page_down` (the
+same helpers its official `pager.py` example uses), Home/End jump via
+`window.vertical_scroll`, Ctrl+C/Ctrl+D exit. Auto-scroll-to-focus works
+by reporting the focused block's row via `get_cursor_position` — the
+standard prompt_toolkit idiom for "keep this in view." No input box yet
+— deliberately: with nothing else focusable, every binding can stay
+global, deferring the focus-scoping Stage 21 will need once a real
+editable Buffer exists.
+- Every prompt_toolkit API here was verified against the actually
+  installed version by direct inspection before writing code, not
+  assumed — including one real surprise: `Application(...)` resolves a
+  default `output` **at construction time**, not at `.run()`, so a bare
+  `Application()` in this dev environment (no real Windows console
+  buffer attached to the tool's shell) raised `NoConsoleScreenBufferError`
+  immediately; `input`/`output` must be passed to the constructor, which
+  is why `build_application()`'s signature takes them explicitly.
+- **Honesty note, unlike every other stage in this plan**: I cannot
+  drive a real interactive terminal from this environment — no tool
+  here provides genuine keypress-by-keypress control of a live TTY. What
+  I verified myself: 12 offline tests (141 total) covering
+  `TranscriptState`'s pure logic (focus clamping on both ends and on an
+  empty state, fold toggling and its no-op on non-collapsible blocks,
+  cursor-row math) plus one integration test driving a **real**
+  `Application` headlessly via `prompt_toolkit.input.create_pipe_input`
+  + `prompt_toolkit.output.DummyOutput` (the same pattern prompt_toolkit
+  and IPython use for their own test suites), simulating actual VT100
+  key sequences (verified empirically against the installed
+  prompt_toolkit, not guessed) for every binding and confirming state
+  mutates correctly and the app exits cleanly on both Ctrl+C and Ctrl+D.
+  What this does **not** prove: whether it actually *looks* right on
+  screen, whether auto-scroll-to-focus visually tracks smoothly, or
+  whether Windows' legacy `conhost` console (vs. Windows Terminal)
+  renders it acceptably — the exact risk flagged in the original
+  architecture review. `pixi run python -m make_harness.tui.app` runs
+  the static demo in a real terminal; this needs a human to actually
+  look at it before Stage 20 builds threading on top.
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).
