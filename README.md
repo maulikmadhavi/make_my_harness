@@ -98,13 +98,26 @@ same as any other CLI. Share the `.tar.gz` with someone else and
 ### Running it
 
 ```
-harness REPL — openai/gpt-oss-120b — logging to logs\20260718_...jsonl
+make-harness v0.1.0 — openai/gpt-oss-120b
+log:   logs\20260718_...jsonl
 tools: read_file, write_file, run_command, web_search, http_request, save_memory, read_memory
+@path attaches a file or folder — e.g. @make_harness/llm.py
+type 'exit' or Ctrl+C to quit
+
 you >
 ```
 
 - Type a request; the agent answers, calling tools as needed (shown as
   `→ tool(args)` / `← result size`).
+- **`@path` mentions**: `Explain @make_harness/llm.py` attaches the file's
+  content to your message (folders attach a listing), so the model reads it
+  without spending a `read_file` call. Only existing paths expand —
+  `@gmail.com` in prose stays plain text. Every real attachment is
+  confirmed with an `@ attached ...` line; no line means the path didn't
+  resolve. Attachments are capped at 20k chars (head+tail).
+- Output is ANSI-colored (dim tool traces, yellow permission prompts, red
+  errors). Colors turn off automatically when output is piped, or set
+  `NO_COLOR=1`.
 - When a side-effecting tool is requested you'll see
   `allow? y = once / n = deny / a = always` — `n` cancels and hands control
   back to you.
@@ -245,12 +258,15 @@ the same suite on every push.
 | `GROQ_API_KEY` | LLM backend auth | required |
 | `TAVILY_API_KEY` / `BRAVE_API_KEY` | enables `web_search` | unset → clear error |
 | `HARNESS_TOKEN_BUDGET` | context compaction threshold (tokens) | `60000` |
+| `NO_COLOR` | disables ANSI colors when set | unset → colors on TTY |
 
 ## Layout
 
 ```
 make_harness/
   cli.py             argparse entry point + the REPL loop
+  mentions.py        @path mention expansion (file/folder attachments)
+  ui.py              ANSI styling helpers (stdlib, NO_COLOR-aware)
   llm.py             LLM adapter (normalization + tool_use_failed salvage)
   llm_providers.py    the swappable backend (currently GroqChatModel)
   log.py             JSONL run logger

@@ -206,6 +206,25 @@ its trigger is real, per this project's own simplicity principle.
   subagents for context isolation, session resume from a JSONL log — no
   new trigger information since these were first deferred; still v2+.
 
+### [x] Stage 11 — REPL UX: ANSI colors + @path mentions
+User-requested 2026-07-20; done out of numeric order — independent of
+Stages 9–10, which stay gated on their own conditions.
+- `make_harness/ui.py`: stdlib-only ANSI helpers, auto-disabled for
+  non-TTY output and `NO_COLOR` (no rich/colorama dependency). Cyan
+  banner/prompt, green answers, dim tool traces, yellow for attention
+  (permission prompts, denials, short-circuits), red errors.
+- `make_harness/mentions.py`: `@path` in user input attaches the file
+  content (folders: a listing) to the outgoing message — same
+  "see it without spending a tool call" idea as the Stage 4 memory
+  index. Only existing paths expand; each attachment is confirmed with
+  an `@ attached` line; capped head+tail at 20k chars via the shared
+  truncate(); recorded in the `user_message` log event.
+- Learned live: checking the raw mention before the punctuation-stripped
+  one made `@a.py.` resolve differently on Windows (ignores trailing
+  dots) than Linux — stripped-first keeps platforms identical.
+- Verified: 11 new offline tests (45 total); live smoke where the model
+  answered from an attached `@pixi.toml` with zero tool calls.
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).
