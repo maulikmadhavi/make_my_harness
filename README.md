@@ -67,7 +67,14 @@ style you prefer.
 
 ### Option B — install as a standalone CLI tool (pip, no repo checkout needed)
 
-Build a distributable tarball (sdist) and wheel from this repo:
+Build a distributable tarball (sdist) and wheel from this repo. If you're
+working via pixi, `setuptools` and `build` are already dev dependencies:
+
+```bash
+pixi run build          # -> python -m build --outdir dist
+```
+
+Without pixi:
 
 ```bash
 pip install build

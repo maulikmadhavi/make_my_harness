@@ -8,11 +8,14 @@ version = "0.1.0"
 [tasks]
 start = "make-harness"
 test = "pytest"
+build = "python -m build --outdir dist"
 
 [dependencies]
 python = "==3.12"
 pip = ">=26.1.2,<27"
 pytest = ">=8"
+setuptools = ">=80"
+python-build = ">=1.2"
 
 [pypi-dependencies]
 # editable install of this project itself: registers the `make-harness`

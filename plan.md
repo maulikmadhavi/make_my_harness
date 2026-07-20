@@ -104,6 +104,14 @@ One commit per stage.
   installed the sdist into a throwaway venv with no connection to this
   repo and ran `make-harness` live from an unrelated directory — full
   LLM round-trip succeeded, log file created relative to that directory.
+- 2026-07-20 addendum: added `setuptools` and `python-build` as pixi dev
+  dependencies plus a `pixi run build` task (`python -m build --outdir
+  dist`), so building the tarball/wheel no longer needs a `pip install
+  build` outside pixi. `python -m build` still resolves the actual build
+  backend from `pyproject.toml` (hatchling, isolated venv) regardless —
+  `setuptools`/`python-build` just make the tool itself available inside
+  `pixi run`. Verified: `pixi run build` produced both
+  `make_harness-0.1.0.tar.gz` and `make_harness-0.1.0-py3-none-any.whl`.
 
 ### [x] Stage 7 — Project hygiene (before behavior changes, not after)
 Ordered first deliberately: per this repo's own karpathy-guidelines
