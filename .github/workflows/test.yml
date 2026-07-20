@@ -1,0 +1,20 @@
+# Minimal CI: run the pytest suite on every push and PR.
+# Deliberately pip-based (not pixi) — CI only needs the package plus
+# pytest, not the full dev environment. No lint step yet (see plan.md
+# Stage 7: not worth the config until the suite itself has settled).
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . pytest
+      - run: pytest -q
