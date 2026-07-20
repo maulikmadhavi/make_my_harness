@@ -250,6 +250,27 @@ Stages 9–10, which stay gated on their own conditions.
   completer via `prompt_toolkit` `Document`s directly, no terminal
   needed. Verified live: `pixi run make-harness --version` and a piped
   `exit` both still work unchanged after adding the dependency.
+- **Permission gate as a dropdown** (user-requested follow-up, same day):
+  `policy.py`'s typed `y/n/a` prompt replaced with a four-way pop-up
+  dropdown — `yes` (once) / `no` (deny once) / `always` (allow this tool
+  for the rest of the session) / `deny` (new: permanently block this tool
+  for the session — the symmetric counterpart to `always`, so a chatty
+  tool can be silenced once instead of denied on every single call).
+  Built by generalizing the `@path` picker mechanism:
+  `make_harness/prompt.py` gained `ChoiceCompleter` (filters a fixed
+  value/label list) and `make_chooser()`, returning an
+  `ask(prompt_text, choices)` that opens the pop-up in a real terminal or
+  falls back to a typed, re-prompting match otherwise — same TTY split
+  as `make_input()`. `Policy` now tracks `always_allow` and `always_deny`
+  per tool name; EOFError and KeyboardInterrupt during the prompt both
+  deny safely, same as before.
+  Verified: 19 new offline tests (73 total) — `ChoiceCompleter` filtering,
+  `_match_choice`'s exact/prefix/ambiguous-prefix cases, the non-TTY
+  fallback loop, and `Policy`'s four choices including that `always`/
+  `deny` are remembered per-tool and never re-prompt. Live smoke: a real
+  Groq session requesting two `write_file` calls, answering `always` on
+  the first prompt — the second call executed with zero further prompts
+  and `policy.always_allow == {"write_file"}`.
 
 ## Deliberately NOT built
 

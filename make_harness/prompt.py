@@ -1,12 +1,12 @@
-"""Interactive input with a pop-up file picker for @path mentions.
+"""Interactive input: a pop-up file picker for @path mentions, and a
+pop-up dropdown for multiple-choice prompts (e.g. the permission gate).
 
 Typing `@` (or `@par...`) opens a completion menu of files and folders
 under the cursor — Tab/arrows to select, like the fancy harnesses.
 Built on prompt_toolkit, the project's first real UI dependency: an
 interactive menu is not feasible with the stdlib alone (readline doesn't
 exist on Windows). When stdin/stdout isn't a terminal (piped input,
-tests, CI) this falls back to plain input() and behaves exactly as
-before.
+tests, CI) both fall back to plain input() and behave exactly as before.
 """
 
 import re
@@ -66,3 +66,65 @@ def make_input():
         return session.prompt(ANSI(prompt_text))
 
     return read
+
+
+class ChoiceCompleter(Completer):
+    """Completes from a fixed (value, label) list, filtering on whatever
+    has been typed so far (case-insensitive prefix on value or label)."""
+
+    def __init__(self, choices):
+        self.choices = choices
+
+    def get_completions(self, document, complete_event):
+        typed = document.text_before_cursor.strip().lower()
+        for value, label in self.choices:
+            if not typed or value.lower().startswith(typed) or label.lower().startswith(typed):
+                yield Completion(value, start_position=-len(document.text_before_cursor), display=label)
+
+
+def _match_choice(raw, choices):
+    """Resolve typed text to a choice value: exact value/label match, or
+    an unambiguous value prefix. Returns None if nothing matched."""
+    raw = raw.strip().lower()
+    if not raw:
+        return None
+    for value, label in choices:
+        if raw == value.lower() or raw == label.lower():
+            return value
+    prefix_matches = [value for value, _ in choices if value.lower().startswith(raw)]
+    return prefix_matches[0] if len(prefix_matches) == 1 else None
+
+
+def make_chooser():
+    """Return an ask(prompt_text, choices) -> value callable.
+
+    choices is a list of (value, label) pairs. In a real terminal this
+    opens a pop-up dropdown (arrow keys or typing to filter, Enter to
+    pick — the same picker mechanism as @path); otherwise it falls back
+    to a plain typed prompt, matched against each choice's value/label.
+    Re-prompts on anything that doesn't resolve to exactly one choice.
+    """
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+
+        def ask(prompt_text, choices):
+            hint = "/".join(value for value, _ in choices)
+            while True:
+                matched = _match_choice(input(f"{prompt_text}[{hint}] "), choices)
+                if matched:
+                    return matched
+
+        return ask
+
+    session = PromptSession(complete_while_typing=True)
+
+    def _open_menu():
+        session.app.current_buffer.start_completion(select_first=False)
+
+    def ask(prompt_text, choices):
+        session.completer = ChoiceCompleter(choices)
+        while True:
+            matched = _match_choice(session.prompt(ANSI(prompt_text), pre_run=_open_menu), choices)
+            if matched:
+                return matched
+
+    return ask

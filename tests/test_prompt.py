@@ -1,12 +1,20 @@
-"""Tests for prompt.AtPathCompleter — the @path picker's completion logic,
-driven offline via prompt_toolkit Documents (no terminal needed)."""
+"""Tests for prompt.AtPathCompleter (the @path picker) and ChoiceCompleter
+/_match_choice/make_chooser (the yes/no/always/deny dropdown), all driven
+offline via prompt_toolkit Documents or a stubbed input() — no terminal
+needed."""
 
 import os
 
 import pytest
 from prompt_toolkit.document import Document
 
-from make_harness.prompt import AtPathCompleter, make_input
+from make_harness.prompt import (
+    AtPathCompleter,
+    ChoiceCompleter,
+    _match_choice,
+    make_chooser,
+    make_input,
+)
 
 
 def _completions(text):
@@ -69,3 +77,64 @@ def test_non_tty_falls_back_to_plain_input():
     # Under pytest stdin/stdout are captured, so make_input must return the
     # builtin — the piped-REPL regression test covers this end to end.
     assert make_input() is input
+
+
+_YNAD = [
+    ("yes", "Yes — allow this call"),
+    ("no", "No — deny this call"),
+    ("always", "Always — allow forever"),
+    ("deny", "Deny — block forever"),
+]
+
+
+def test_choice_completer_lists_everything_when_untyped():
+    values = [c.text for c in ChoiceCompleter(_YNAD).get_completions(Document(""), None)]
+    assert values == ["yes", "no", "always", "deny"]
+
+
+def test_choice_completer_filters_by_value_prefix():
+    values = [c.text for c in ChoiceCompleter(_YNAD).get_completions(Document("al"), None)]
+    assert values == ["always"]
+
+
+def test_choice_completer_filters_by_label_prefix():
+    values = [c.text for c in ChoiceCompleter(_YNAD).get_completions(Document("Deny"), None)]
+    assert values == ["deny"]
+
+
+def test_match_choice_exact_value():
+    assert _match_choice("yes", [("yes", "Y"), ("no", "N")]) == "yes"
+
+
+def test_match_choice_case_insensitive_label():
+    choices = [("always", "Always Allow"), ("no", "No")]
+    assert _match_choice("ALWAYS ALLOW", choices) == "always"
+
+
+def test_match_choice_unambiguous_prefix():
+    assert _match_choice("al", [("yes", "Y"), ("always", "Always")]) == "always"
+
+
+def test_match_choice_ambiguous_prefix_returns_none():
+    assert _match_choice("de", [("deny", "Deny"), ("delete", "Delete")]) is None
+
+
+def test_match_choice_no_match_returns_none():
+    assert _match_choice("maybe", [("yes", "Y"), ("no", "N")]) is None
+
+
+def test_match_choice_empty_returns_none():
+    assert _match_choice("", [("yes", "Y")]) is None
+
+
+def test_chooser_non_tty_matches_typed_value(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda prompt: "always")
+    ask = make_chooser()
+    assert ask("allow? ", _YNAD) == "always"
+
+
+def test_chooser_non_tty_reprompts_until_matched(monkeypatch):
+    responses = iter(["banana", "y"])
+    monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
+    ask = make_chooser()
+    assert ask("allow? ", _YNAD) == "yes"

@@ -131,9 +131,12 @@ you >
 - Output is ANSI-colored (dim tool traces, yellow permission prompts, red
   errors). Colors turn off automatically when output is piped, or set
   `NO_COLOR=1`.
-- When a side-effecting tool is requested you'll see
-  `allow? y = once / n = deny / a = always` — `n` cancels and hands control
-  back to you.
+- When a side-effecting tool is requested you'll see an `allow?` pop-up
+  dropdown with four choices — arrow keys + Enter to pick, or type to
+  filter (`Yes` for once, `No` to deny once, `Always` to allow this tool
+  for the rest of the session, `Deny` to permanently block it for the
+  session, the counterpart to `Always`). Any denial (`No` or `Deny`) ends
+  the turn immediately and hands control back to you.
 - `exit`, `quit`, or Ctrl+C ends the session.
 - Every session writes one JSONL file to `logs/` (created in the current
   working directory); each line is one event (`llm_request`,
@@ -171,7 +174,7 @@ Type, one per line:
 2. `Read pixi.toml and tell me which python version it pins.`
    → a `read_file` call, answer `3.12`.
 3. `Create hello.txt containing exactly: Hello from the harness`
-   → a `write_file` call (approve with `y`); verify with
+   → a `write_file` call (approve with `Yes`); verify with
    `cat hello.txt` (bash) / `Get-Content hello.txt` (PowerShell), then
    delete the file.
 
@@ -179,13 +182,16 @@ The log must show the full `tool_call` → `tool_result` chain.
 
 #### Stage 2 — permission gate
 
-1. Ask for any file write → the `allow?` prompt appears; answer `y` → the
-   write happens.
-2. Ask it to run a command → answer `n` → the turn ends immediately with
+1. Ask for any file write → the `allow?` dropdown appears; pick `Yes` →
+   the write happens.
+2. Ask it to run a command → pick `No` → the turn ends immediately with
    `[tool call denied — tell me how to proceed]`. It must NOT retry the
    command with different variants.
-3. Ask for another write → answer `a` → this and later writes in the same
-   session run without prompting.
+3. Ask for another write → pick `Always` → this and later writes in the
+   same session run without prompting.
+4. Ask it to run a command → pick `Deny` → denied, and every later
+   `run_command` request in the session is denied automatically with no
+   further prompt (the permanent counterpart to `Always`).
 
 The log gets a `permission` event with the verdict for every gated call.
 
