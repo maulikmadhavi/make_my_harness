@@ -409,6 +409,39 @@ override — nothing in `Policy` writes to stdout on its own.
   between them, no stray blank line left over) and the file write still
   completes end to end.
 
+### [x] Stage 17 — `tui/blocks.py`: pure transcript data model
+No prompt_toolkit import — stays testable with plain message-dict
+fixtures, same convention `test_context.py` already uses. Walks
+`messages` plus the parallel `reasoning_events` list (Stage 15) into a
+flat `Block(id, kind, text, meta, collapsible, collapsed)` list: a `user`
+block per user message, a `reasoning` block per assistant step (skipped
+entirely when that step's reasoning text is empty/absent — most models
+without reasoning support would otherwise render an empty "thinking"
+line on every single step), a `tool` block per `tool_calls` entry (id =
+the real `tool_call_id`, already globally unique; text = the matching
+`role: tool` result content, whatever it says — real output, `"Denied
+by user."`, or the short-circuit nudge, all come through as-is, no
+special-casing), and an `answer` block for the final content-only step.
+- `folds: dict[block_id, bool]`, passed in and mutated in place (same
+  convention `context._stub_tools` uses): an id seen for the first time
+  gets a length-based default (`len(text) > HARNESS_REASONING_FOLD_CHARS`,
+  default `400`) seeded in; an id already present keeps whatever fold
+  state was last set, so a manual toggle survives the many
+  `build_blocks()` calls one live turn triggers as it re-walks the
+  growing transcript. Only `reasoning` blocks are collapsible.
+- Verified: 13 new offline tests (113 total) — block kinds/order for
+  plain Q&A, a tool call+result, denial, short-circuit, multiple tool
+  calls in one batch, the empty/missing-reasoning skip (all three of
+  `None`/`""`/a too-short `reasoning_events` list), positional alignment
+  when one step has no reasoning and the next does, the system message
+  being skipped, the default fold threshold both directions, the env
+  var override, fold-state survival across growing calls with a manual
+  override in between, and block-id stability across repeated calls on
+  unchanged input. Integration check: a real `run_turn()` call (real
+  Groq reasoning + a real `read_file` call) fed straight into
+  `build_blocks()`, confirming the pure model handles the harness's
+  actual output shape, not just hand-built fixtures.
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).
