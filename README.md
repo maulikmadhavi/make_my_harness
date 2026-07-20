@@ -115,6 +115,12 @@ you >
   `@gmail.com` in prose stays plain text. Every real attachment is
   confirmed with an `@ attached ...` line; no line means the path didn't
   resolve. Attachments are capped at 20k chars (head+tail).
+- **`@` pop-up picker**: in a real terminal, typing `@` opens a completion
+  menu of the current directory (folders first, then files); keep typing to
+  filter, `Tab`/arrow keys to select, `/` to descend into a folder. Falls
+  back to plain typing automatically when stdin/stdout isn't a TTY (piped
+  input, scripts, CI) — the attachment behavior above is identical either
+  way, the picker is purely a typing aid.
 - Output is ANSI-colored (dim tool traces, yellow permission prompts, red
   errors). Colors turn off automatically when output is piped, or set
   `NO_COLOR=1`.
@@ -265,6 +271,7 @@ the same suite on every push.
 ```
 make_harness/
   cli.py             argparse entry point + the REPL loop
+  prompt.py          @ pop-up file/folder picker (prompt_toolkit)
   mentions.py        @path mention expansion (file/folder attachments)
   ui.py              ANSI styling helpers (stdlib, NO_COLOR-aware)
   llm.py             LLM adapter (normalization + tool_use_failed salvage)

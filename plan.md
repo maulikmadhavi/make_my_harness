@@ -228,6 +228,20 @@ Stages 9–10, which stay gated on their own conditions.
   quitting. Piped (non-TTY) stdin is now reconfigured to `utf-8-sig`.
 - Verified: 11 new offline tests (45 total); live smoke where the model
   answered from an attached `@pixi.toml` with zero tool calls.
+- **`@` pop-up picker** (user-requested follow-up, same day): typing `@`
+  in a real terminal now opens a completion menu of the current directory
+  (folders first, filtered as you type, Tab/arrows to select) — the
+  discoverability fancier harnesses (Claude Code, Codex CLI) have and
+  plain `@path` typing didn't. `make_harness/prompt.py`, built on
+  `prompt_toolkit` — the project's **first real UI dependency**, added
+  deliberately: an interactive pop-up isn't feasible stdlib-only
+  (`readline` doesn't exist on Windows). Falls back to plain `input()`
+  for non-TTY stdin (piped input, tests, CI) with identical behavior to
+  before — the picker is purely a typing aid, not part of the attachment
+  logic in `mentions.py`. 8 new offline tests (54 total) drive the
+  completer via `prompt_toolkit` `Document`s directly, no terminal
+  needed. Verified live: `pixi run make-harness --version` and a piped
+  `exit` both still work unchanged after adding the dependency.
 
 ## Deliberately NOT built
 
