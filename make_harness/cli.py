@@ -226,13 +226,14 @@ def main():
     )
     parser.add_argument("--version", action="version", version=f"make-harness {__version__}")
     parser.add_argument(
-        "--no-tui", action="store_true",
-        help="Use classic text REPL instead of full-screen TUI"
+        "--tui", action="store_true",
+        help="Use full-screen TUI (experimental, best with bash/linux)"
     )
     args = parser.parse_args()
 
-    # Stage 22: Use TUI by default, fall back to text REPL with --no-tui or piped input
-    use_tui = not args.no_tui and sys.stdin.isatty()
+    # Use text REPL by default (stable), TUI with explicit --tui flag
+    # TUI requires proper terminal support (works best on bash/linux)
+    use_tui = args.tui and sys.stdin.isatty()
     if use_tui:
         run_tui_repl()
     else:
