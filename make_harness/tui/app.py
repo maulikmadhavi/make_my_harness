@@ -136,7 +136,7 @@ def build_application(state, input_buffer=None, input=None, output=None, on_subm
     )
     transcript_window = Window(content=transcript_control, wrap_lines=True, always_hide_cursor=True)
 
-    # Input box (Stage 21)
+    # Input box (Stage 21) - focused by default
     input_control = BufferControl(
         buffer=input_buffer,
         input_processors=[],
@@ -148,6 +148,7 @@ def build_application(state, input_buffer=None, input=None, output=None, on_subm
         height=1,
         style="class:user",
         wrap_lines=False,
+        always_hide_cursor=False,  # Show cursor in input box
     )
 
     # Input prompt
@@ -228,6 +229,7 @@ def build_application(state, input_buffer=None, input=None, output=None, on_subm
         style=STYLE,
         full_screen=True,
         mouse_support=True,
+        enable_page_navigation_bindings=True,
         input=input,
         output=output,
     )
