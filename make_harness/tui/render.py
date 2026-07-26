@@ -11,8 +11,6 @@ from prompt_toolkit.formatted_text import FormattedText
 
 from make_harness.loop import DENIED_RESULT, SHORT_CIRCUIT_RESULT
 
-FOCUS_MARKER = "> "
-NO_MARKER = "  "
 ARGS_PREVIEW_CHARS = 200
 
 
@@ -22,38 +20,122 @@ def _estimate_tokens(text):
     return len(text) // 4
 
 
-def _gutter(block, focused_id):
-    return FOCUS_MARKER if block.id == focused_id else NO_MARKER
+def _focus_indicator(block, focused_id):
+    """Visual indicator for focused vs unfocused state."""
+    if block.id == focused_id:
+        return ("class:focus", "● ")
+    return ("class:border", "  ")
 
 
 def _render_user(block, focused_id):
-    return [("class:user", f"{_gutter(block, focused_id)}you > {block.text}\n")]
+    """User message with professional formatting."""
+    indicator = _focus_indicator(block, focused_id)
+    fragments = []
+
+    # Header with icon
+    fragments.append(indicator)
+    fragments.append(("class:user.header", "▶ YOU"))
+    fragments.append(("class:border", "\n"))
+
+    # Content with left padding
+    for line in block.text.splitlines() or [""]:
+        fragments.append(("class:border", "  "))
+        fragments.append(("class:user", line))
+        fragments.append(("class:border", "\n"))
+
+    # Separator
+    fragments.append(("class:border", "\n"))
+    return fragments
 
 
 def _render_answer(block, focused_id):
-    return [("class:answer", f"{_gutter(block, focused_id)}agent > {block.text}\n")]
+    """Agent response with professional formatting."""
+    indicator = _focus_indicator(block, focused_id)
+    fragments = []
+
+    # Header with icon
+    fragments.append(indicator)
+    fragments.append(("class:answer.header", "◆ AGENT"))
+    fragments.append(("class:border", "\n"))
+
+    # Content with left padding
+    for line in block.text.splitlines() or [""]:
+        fragments.append(("class:border", "  "))
+        fragments.append(("class:answer", line))
+        fragments.append(("class:border", "\n"))
+
+    # Separator
+    fragments.append(("class:border", "\n"))
+    return fragments
 
 
 def _render_reasoning(block, focused_id):
-    gutter = _gutter(block, focused_id)
-    if block.collapsed:
-        tokens = _estimate_tokens(block.text)
-        return [("class:dim", f"{gutter}▸ thinking ({len(block.text)} chars, ~{tokens} tokens)\n")]
-    fragments = [("class:dim", f"{gutter}▾ thinking ({len(block.text)} chars)\n")]
-    for line in block.text.splitlines() or [""]:
-        fragments.append(("class:dim", f"    {line}\n"))
+    """Reasoning/thinking block with collapse UI."""
+    indicator = _focus_indicator(block, focused_id)
+    fragments = []
+
+    # Header with collapse indicator
+    fragments.append(indicator)
+    collapse_char = "▸" if block.collapsed else "▾"
+    fragments.append(("class:reasoning.header", f"{collapse_char} THINKING"))
+
+    # Metadata on same line as header
+    tokens = _estimate_tokens(block.text)
+    fragments.append(("class:meta", f" ({len(block.text)} chars, ~{tokens}t)"))
+    fragments.append(("class:border", "\n"))
+
+    # Content (if expanded)
+    if not block.collapsed:
+        for line in block.text.splitlines() or [""]:
+            fragments.append(("class:border", "  "))
+            fragments.append(("class:reasoning", line))
+            fragments.append(("class:border", "\n"))
+
+    # Separator
+    fragments.append(("class:border", "\n"))
     return fragments
 
 
 def _render_tool(block, focused_id):
-    gutter = _gutter(block, focused_id)
+    """Tool call with outcome indicator."""
+    indicator = _focus_indicator(block, focused_id)
+    fragments = []
+
     name = block.meta.get("tool", "?")
     args = block.meta.get("args", "")[:ARGS_PREVIEW_CHARS]
-    outcome_style = "class:yellow" if block.text in (DENIED_RESULT, SHORT_CIRCUIT_RESULT) else "class:dim"
-    return [
-        ("class:dim", f"{gutter}→ {name}({args})\n"),
-        (outcome_style, f"  ← {block.text}\n"),
-    ]
+    result = block.text
+
+    # Determine outcome style and icon
+    if result in (DENIED_RESULT, SHORT_CIRCUIT_RESULT):
+        outcome_style = "class:tool.denied"
+        outcome_icon = "⊘"
+    elif result.startswith("Error") or result.startswith("error"):
+        outcome_style = "class:tool.error"
+        outcome_icon = "✗"
+    elif result:
+        outcome_style = "class:tool.success"
+        outcome_icon = "✓"
+    else:
+        outcome_style = "class:tool.pending"
+        outcome_icon = "⧗"
+
+    # Tool call header
+    fragments.append(indicator)
+    fragments.append(("class:tool.header", "→ TOOL"))
+    fragments.append(("class:border", " "))
+    fragments.append(("class:tool", name))
+    fragments.append(("class:meta", f"({args})"))
+    fragments.append(("class:border", "\n"))
+
+    # Result line with outcome indicator
+    fragments.append(("class:border", "  "))
+    fragments.append((outcome_style, f"{outcome_icon} "))
+    fragments.append((outcome_style, result if result else "pending…"))
+    fragments.append(("class:border", "\n"))
+
+    # Separator
+    fragments.append(("class:border", "\n"))
+    return fragments
 
 
 _RENDERERS = {

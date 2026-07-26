@@ -23,10 +23,37 @@ from prompt_toolkit.styles import Style
 from make_harness.tui.render import render_blocks
 
 STYLE = Style.from_dict({
-    "user": "bold fg:ansicyan",
-    "answer": "bold fg:ansigreen",
-    "dim": "fg:#888888",
-    "yellow": "fg:ansiyellow",
+    # Block headers
+    "user.header": "bold fg:#00d084 bg:#0a0e27",
+    "answer.header": "bold fg:#10b981 bg:#0a0e27",
+    "reasoning.header": "bold fg:#64748b bg:#0a0e27",
+    "tool.header": "bold fg:#06b6d4 bg:#0a0e27",
+
+    # Block content
+    "user": "fg:#e0e7ff",
+    "answer": "fg:#ecfdf5",
+    "reasoning": "fg:#94a3b8",
+    "tool": "fg:#cffafe",
+
+    # Tool outcomes
+    "tool.success": "fg:#10b981 bold",
+    "tool.error": "fg:#ef4444 bold",
+    "tool.denied": "fg:#fbbf24 bold",
+    "tool.pending": "fg:#fbbf24",
+
+    # Separators & focus
+    "border": "fg:#334155",
+    "focus": "fg:#00d084",
+    "focus.bg": "bg:#1e293b",
+
+    # Metadata
+    "meta": "fg:#475569",
+    "meta.bold": "bold fg:#64748b",
+    "token.count": "fg:#94a3b8",
+
+    # Status
+    "status": "fg:#64748b bg:#0f172a",
+    "status.active": "bold fg:#00d084 bg:#0f172a",
 })
 
 
@@ -77,12 +104,34 @@ def build_application(state, input=None, output=None):
     explicitly by tests (prompt_toolkit's own headless testing utilities,
     create_pipe_input + DummyOutput) — the real CLI entry point (Stage 22)
     leaves both None so prompt_toolkit uses the real terminal."""
+
+    # Header bar
+    header_text = FormattedTextControl(
+        lambda: [
+            ("class:status.active", "make_harness"),
+            ("class:status", " v0.1.0 • "),
+            ("class:status", "⬆↓ navigate  Space/Enter fold  PgUp/PgDn scroll  Ctrl+C quit"),
+        ]
+    )
+    header_window = Window(content=header_text, height=1, style="class:status")
+
+    # Transcript
     control = FormattedTextControl(
         text=state.render,
         focusable=True,
         get_cursor_position=lambda: Point(x=0, y=state.cursor_row()),
     )
     transcript_window = Window(content=control, wrap_lines=True, always_hide_cursor=True)
+
+    # Footer bar
+    footer_text = FormattedTextControl(
+        lambda: [
+            ("class:status", "Focused: "),
+            ("class:status.active", state.focused_id or "—"),
+            ("class:status", f" • Blocks: {len(state.blocks)}"),
+        ]
+    )
+    footer_window = Window(content=footer_text, height=1, style="class:status")
 
     kb = KeyBindings()
 
@@ -115,8 +164,14 @@ def build_application(state, input=None, output=None):
     def _quit(event):
         event.app.exit()
 
+    from prompt_toolkit.layout.containers import HSplit
+
     return Application(
-        layout=Layout(transcript_window),
+        layout=Layout(HSplit([
+            header_window,
+            transcript_window,
+            footer_window,
+        ])),
         key_bindings=kb,
         style=STYLE,
         full_screen=True,
