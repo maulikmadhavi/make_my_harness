@@ -17,20 +17,32 @@ def _load_env_file():
     Skipped if: GROQ_API_KEY is set (test override), or MAKE_HARNESS_NO_ENV is set.
     """
     # Skip if explicitly disabled or running in test with GROQ_API_KEY override
-    if os.getenv("MAKE_HARNESS_NO_ENV") or "GROQ_API_KEY" in os.environ:
+    if os.getenv("MAKE_HARNESS_NO_ENV"):
         return
 
-    env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-    if os.path.exists(env_path):
-        with open(env_path) as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    key, _, value = line.partition("=")
-                    key = key.strip()
-                    value = value.strip().strip('"\'')
-                    if key and not os.getenv(key):  # Don't override existing env vars
-                        os.environ[key] = value
+    # Try multiple locations for .env file
+    candidates = [
+        ".env",  # Current working directory
+        os.path.expanduser("~/.make_harness/.env"),  # User home
+        os.path.join(os.path.dirname(__file__), "..", ".env"),  # Project root relative to this file
+    ]
+
+    for env_path in candidates:
+        if os.path.isfile(env_path):
+            try:
+                with open(env_path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            key, _, value = line.partition("=")
+                            key = key.strip()
+                            value = value.strip().strip('"\'')
+                            # Don't override existing env vars, especially GROQ_API_KEY
+                            if key and not os.getenv(key):
+                                os.environ[key] = value
+                break  # Stop after first successful load
+            except (IOError, OSError):
+                continue
 
 
 _load_env_file()
