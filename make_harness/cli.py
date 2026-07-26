@@ -47,6 +47,9 @@ def _load_env_file():
 
 _load_env_file()
 
+# Rich console for polished output
+console = Console()
+
 # Importing a toolset registers its tools with the shared registry.
 import make_harness.toolsets.fs  # noqa: F401
 import make_harness.toolsets.shell  # noqa: F401
@@ -67,6 +70,10 @@ from make_harness.tools import registry
 from make_harness.ui import bold, cyan, dim, green, red
 from make_harness.tui.app import TranscriptState, build_application
 from make_harness.tui.blocks import build_blocks
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.markdown import Markdown
 
 SYSTEM_PROMPT = (
     "You are a helpful coding agent running in a minimal local harness on the user's "
@@ -181,19 +188,29 @@ def repl():
         system += "\n\nAvailable skills (use load_skill for full instructions):\n" + skills
     messages = [{"role": "system", "content": system}]
     tool_names = ", ".join(t["function"]["name"] for t in registry.schemas())
-    print(f"{bold(cyan('make-harness'))} {dim('v' + __version__)} — {llm.model}")
-    print(dim(f"log:   {log.path}"))
-    print(dim(f"tools: {tool_names}"))
-    print(dim("@path attaches a file or folder — type @ for a picker (Tab/arrows select)"))
-    print(dim("/clear resets the conversation (memory/skills index kept)"))
-    print(dim("type 'exit' or Ctrl+C to quit"))
+
+    # Rich formatted header
+    console.print()
+    console.print(Panel(
+        f"[bold cyan]make-harness[/bold cyan] [dim]v{__version__}[/dim] • [cyan]{llm.model}[/cyan]",
+        expand=False,
+        border_style="cyan"
+    ))
+    console.print(f"[dim]log:   {log.path}[/dim]")
+    console.print(f"[dim]tools: {tool_names}[/dim]")
+    console.print()
+    console.print("[dim]Shortcuts:[/dim]")
+    console.print("  [cyan]@path[/cyan]     Attach files/folders")
+    console.print("  [cyan]/clear[/cyan]    Reset conversation (memory kept)")
+    console.print("  [cyan]exit[/cyan]      Quit")
+    console.print()
     read_input = make_input()
 
     while True:
         try:
-            user = read_input(f"\n{bold(cyan('you >'))} ").strip()
+            user = read_input(f"[cyan]you >[/cyan] ").strip()
         except (EOFError, KeyboardInterrupt):
-            print()
+            console.print()
             break
         if not user:
             continue
@@ -201,21 +218,28 @@ def repl():
             break
         if user.startswith("/"):
             messages, output = commands.run(user, messages, log)
-            print(dim(output))
+            console.print(f"[dim]{output}[/dim]")
             continue
 
         expanded, attached = expand_mentions(user)
         for mention in attached:
-            print(dim(f"  @ attached {mention}"))
+            console.print(f"[dim]  @ attached {mention}[/dim]")
         log.event("user_message", content=user, attachments=attached)
         messages.append({"role": "user", "content": expanded})
         try:
             messages = compact(messages, llm, log)
             answer = run_turn(llm, registry, policy, log, messages)
-            print(f"\n{bold(green('agent >'))} {answer}")
+            console.print()
+            console.print(Panel(
+                answer,
+                title="[bold green]agent[/bold green]",
+                border_style="green",
+                expand=False
+            ))
+            console.print()
         except Exception as e:
             log.event("error", error=f"{type(e).__name__}: {e}")
-            print(red(f"[error] {e}"))
+            console.print(f"[bold red][error][/bold red] {e}")
 
 
 def main():

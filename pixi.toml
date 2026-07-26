@@ -21,3 +21,4 @@ python-build = ">=1.2"
 # editable install of this project itself: registers the `make-harness`
 # console script (see pyproject.toml) inside the pixi environment.
 make-harness = { path = ".", editable = true }
+rich = ">=13.0"
