@@ -1,23 +1,21 @@
 """Full-screen Application: layout, scrolling, and fold/focus key
 bindings over the render.py/blocks.py model.
 
-Stage 19 wires this up against a static demo block list to prove the
-layout, scrolling, and fold/focus interactions work before Stage 20
-adds live threading and Stage 21 adds a real, editable input box.
-run_demo() is a throwaway entry point for that purpose only — Stage 21
-replaces it with the real live-turn-backed one. There is deliberately no
-input box yet: with nothing else focusable, every key binding here can
-stay global, avoiding the focus-scoping Stage 21 will need once a real
-editable Buffer exists that must not have Up/Down/Space stolen from it
-while typing.
+Stage 19-20: Static demo with scrolling and fold/focus.
+Stage 21: Adds editable input buffer at the bottom.
+Stage 22: Integrates with live agent loop.
 """
 
 from prompt_toolkit import Application
 from prompt_toolkit.data_structures import Point
+from prompt_toolkit.document import Document
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.key_binding.bindings.scroll import scroll_page_down, scroll_page_up
 from prompt_toolkit.layout import Layout, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit.layout.containers import HSplit, VSplit
+from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
+from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.styles import Style
 
 from make_harness.tui.render import render_blocks
@@ -99,29 +97,67 @@ class TranscriptState:
         return row
 
 
-def build_application(state, input=None, output=None):
-    """Build the Application. input/output are only ever passed
-    explicitly by tests (prompt_toolkit's own headless testing utilities,
-    create_pipe_input + DummyOutput) — the real CLI entry point (Stage 22)
-    leaves both None so prompt_toolkit uses the real terminal."""
+def build_application(state, input_buffer=None, input=None, output=None, on_submit=None):
+    """Build the Application with editable input buffer (Stage 21).
+
+    Args:
+        state: TranscriptState holding blocks and fold state
+        input_buffer: Optional Buffer for user input (Stage 21+). If None, no input box.
+        input/output: TTY I/O for tests (create_pipe_input + DummyOutput)
+        on_submit: Optional callback(text) when user submits input
+    """
+
+    # Create input buffer if not provided (Stage 21)
+    if input_buffer is None:
+        def on_input_accept(_):
+            """Handle Enter key in input buffer."""
+            text = input_buffer.text.strip()
+            if text and on_submit:
+                on_submit(text)
+                input_buffer.text = ""
+
+        input_buffer = Buffer(multiline=False, completer=None, accept_handler=on_input_accept)
 
     # Header bar
     header_text = FormattedTextControl(
         lambda: [
             ("class:status.active", "make_harness"),
             ("class:status", " v0.1.0 • "),
-            ("class:status", "⬆↓ navigate  Space/Enter fold  PgUp/PgDn scroll  Ctrl+C quit"),
+            ("class:status", "⬆↓ navigate  Space/Enter fold (transcript)  Enter submit (input)  Ctrl+C quit"),
         ]
     )
     header_window = Window(content=header_text, height=1, style="class:status")
 
-    # Transcript
-    control = FormattedTextControl(
+    # Transcript (main area, focusable for navigation)
+    transcript_control = FormattedTextControl(
         text=state.render,
         focusable=True,
         get_cursor_position=lambda: Point(x=0, y=state.cursor_row()),
     )
-    transcript_window = Window(content=control, wrap_lines=True, always_hide_cursor=True)
+    transcript_window = Window(content=transcript_control, wrap_lines=True, always_hide_cursor=True)
+
+    # Input box (Stage 21)
+    input_control = BufferControl(
+        buffer=input_buffer,
+        input_processors=[],
+        focus_on_click=True,
+        search_buffer_control=None,
+    )
+    input_window = Window(
+        content=input_control,
+        height=1,
+        style="class:user",
+        wrap_lines=False,
+    )
+
+    # Input prompt
+    prompt_text = FormattedTextControl(
+        lambda: [
+            ("class:user.header", "▶ YOU"),
+            ("class:border", "\n"),
+        ]
+    )
+    prompt_window = Window(content=prompt_text, height=2, style="class:status")
 
     # Footer bar
     footer_text = FormattedTextControl(
@@ -135,41 +171,57 @@ def build_application(state, input=None, output=None):
 
     kb = KeyBindings()
 
-    @kb.add("up")
+    # Filters for key bindings: only apply to transcript when input is empty
+    def input_is_empty():
+        return input_buffer.text.strip() == ""
+
+    @kb.add("up", filter=Condition(input_is_empty))
     def _move_up(event):
         state.move_focus(-1)
 
-    @kb.add("down")
+    @kb.add("down", filter=Condition(input_is_empty))
     def _move_down(event):
         state.move_focus(1)
 
-    @kb.add("space")
-    @kb.add("enter")
-    def _fold(event):
+    @kb.add("space", filter=Condition(input_is_empty))
+    def _fold_space(event):
         state.toggle_fold()
 
-    kb.add("pageup")(scroll_page_up)
-    kb.add("pagedown")(scroll_page_down)
+    @kb.add("pageup", filter=Condition(input_is_empty))
+    def _pageup(event):
+        scroll_page_up(event)
 
-    @kb.add("home")
+    @kb.add("pagedown", filter=Condition(input_is_empty))
+    def _pagedown(event):
+        scroll_page_down(event)
+
+    @kb.add("home", filter=Condition(input_is_empty))
     def _home(event):
         transcript_window.vertical_scroll = 0
 
-    @kb.add("end")
+    @kb.add("end", filter=Condition(input_is_empty))
     def _end(event):
-        transcript_window.vertical_scroll = 10**9  # prompt_toolkit clamps to content height
+        transcript_window.vertical_scroll = 10**9
+
+    # Escape clears input
+    @kb.add("escape")
+    def _clear_input(event):
+        if input_buffer.text:
+            input_buffer.text = ""
+        else:
+            event.app.exit()
 
     @kb.add("c-c")
     @kb.add("c-d")
     def _quit(event):
         event.app.exit()
 
-    from prompt_toolkit.layout.containers import HSplit
-
     return Application(
         layout=Layout(HSplit([
             header_window,
             transcript_window,
+            prompt_window,
+            input_window,
             footer_window,
         ])),
         key_bindings=kb,
@@ -197,13 +249,26 @@ def _demo_blocks():
 
 
 def run_demo():
-    """Throwaway Stage 19 entry point: try scrolling (PageUp/PageDown/
-    Home/End), moving focus (Up/Down), and folding (Space/Enter) in a
-    real terminal, then quit with Ctrl+C. See make_harness/tui/app.py's
-    module docstring — Stage 21 replaces this with the real entry point.
+    """Demo with interactive input (Stage 21).
+
+    Try:
+    - Click input box and type, press Enter to submit
+    - Escape to clear input
+    - Up/Down: move focus between blocks (when input is empty)
+    - Space/Enter: collapse/expand reasoning (when input is empty)
+    - PgUp/PgDn: scroll (when input is empty)
+    - Ctrl+C: quit
     """
     state = TranscriptState(blocks=_demo_blocks())
-    build_application(state).run()
+
+    def on_demo_submit(text):
+        """Echo user input as a demo."""
+        from make_harness.tui.blocks import Block
+        state.blocks.append(Block(id=f"user-demo-{len(state.blocks)}", kind="user", text=text))
+        state.blocks.append(Block(id=f"answer-demo-{len(state.blocks)}", kind="answer", text=f"You said: {text}"))
+        state.focused_index = len(state.blocks) - 1
+
+    build_application(state, on_submit=on_demo_submit).run()
 
 
 if __name__ == "__main__":
