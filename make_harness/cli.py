@@ -10,6 +10,31 @@ import sys
 import threading
 from queue import Queue, Empty
 
+
+def _load_env_file():
+    """Load .env file if it exists (project root).
+
+    Skipped if: GROQ_API_KEY is set (test override), or MAKE_HARNESS_NO_ENV is set.
+    """
+    # Skip if explicitly disabled or running in test with GROQ_API_KEY override
+    if os.getenv("MAKE_HARNESS_NO_ENV") or "GROQ_API_KEY" in os.environ:
+        return
+
+    env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"\'')
+                    if key and not os.getenv(key):  # Don't override existing env vars
+                        os.environ[key] = value
+
+
+_load_env_file()
+
 # Importing a toolset registers its tools with the shared registry.
 import make_harness.toolsets.fs  # noqa: F401
 import make_harness.toolsets.shell  # noqa: F401
@@ -194,11 +219,12 @@ def main():
     )
     args = parser.parse_args()
 
-    # Stage 22: Use TUI by default, fall back to text REPL with --no-tui
-    if args.no_tui:
-        repl()
-    else:
+    # Stage 22: Use TUI by default, fall back to text REPL with --no-tui or piped input
+    use_tui = not args.no_tui and sys.stdin.isatty()
+    if use_tui:
         run_tui_repl()
+    else:
+        repl()
 
 
 if __name__ == "__main__":
