@@ -10,6 +10,11 @@ import sys
 import threading
 from queue import Queue, Empty
 
+from rich.console import Console
+from rich.markup import escape
+from rich.panel import Panel
+from rich.text import Text
+
 
 def _load_env_file():
     """Load .env file if it exists (project root).
@@ -70,10 +75,6 @@ from make_harness.tools import registry
 from make_harness.ui import bold, cyan, dim, green, red
 from make_harness.tui.app import TranscriptState, build_application
 from make_harness.tui.blocks import build_blocks
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.markdown import Markdown
 
 SYSTEM_PROMPT = (
     "You are a helpful coding agent running in a minimal local harness on the user's "
@@ -208,7 +209,8 @@ def repl():
 
     while True:
         try:
-            user = read_input(f"[cyan]you >[/cyan] ").strip()
+            # read_input is prompt_toolkit (expects ANSI codes, not rich markup)
+            user = read_input(f"\n{bold(cyan('you >'))} ").strip()
         except (EOFError, KeyboardInterrupt):
             console.print()
             break
@@ -218,28 +220,29 @@ def repl():
             break
         if user.startswith("/"):
             messages, output = commands.run(user, messages, log)
-            console.print(f"[dim]{output}[/dim]")
+            console.print(f"[dim]{escape(output)}[/dim]")
             continue
 
         expanded, attached = expand_mentions(user)
         for mention in attached:
-            console.print(f"[dim]  @ attached {mention}[/dim]")
+            console.print(f"[dim]  @ attached {escape(mention)}[/dim]")
         log.event("user_message", content=user, attachments=attached)
         messages.append({"role": "user", "content": expanded})
         try:
             messages = compact(messages, llm, log)
             answer = run_turn(llm, registry, policy, log, messages)
             console.print()
+            # Text() keeps the answer literal — brackets in code like
+            # list[int] must not be parsed as rich markup.
             console.print(Panel(
-                answer,
+                Text(answer or ""),
                 title="[bold green]agent[/bold green]",
                 border_style="green",
                 expand=False
             ))
-            console.print()
         except Exception as e:
             log.event("error", error=f"{type(e).__name__}: {e}")
-            console.print(f"[bold red][error][/bold red] {e}")
+            console.print(f"[bold red]error:[/bold red] {escape(str(e))}")
 
 
 def main():
