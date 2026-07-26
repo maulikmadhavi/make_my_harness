@@ -9,7 +9,7 @@ make_harness/llm_providers.py.
 import json
 import re
 
-from make_harness.llm_providers import GroqChatModel
+from make_harness.llm_providers import get_llm_client
 
 
 def _salvage_tool_call(error_text):
@@ -35,8 +35,9 @@ def _salvage_tool_call(error_text):
 
 class LLMClient:
     def __init__(self, model=None):
-        kwargs = {"model": model} if model else {}
-        self.backend = GroqChatModel(**kwargs)
+        self.backend = get_llm_client()
+        if model:
+            self.backend.model = model
         self.model = self.backend.model
 
     def complete(self, messages, tools=None, retries=2):

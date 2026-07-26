@@ -1,24 +1,35 @@
-"""Your custom chat completion script.
+"""Pluggable LLM backends: Groq, OpenAI, or local endpoints (vLLM, Ollama, etc).
 
-This is the one file to swap out for a different backend (OpenAI, Ollama,
-vLLM, ...); make_harness/llm.py adapts whatever it returns to the rest of
-the harness.
+This is the one file to swap out for a different backend. make_harness/llm.py
+adapts whatever it returns to the rest of the harness. All backends implement
+the same .chat() interface, so swapping is just changing which class is
+instantiated in llm.py.
 """
 
-import os, requests
+import os
+import requests
 
 
-class GroqChatModel:
+class OpenAICompatibleModel:
+    """Generic OpenAI-compatible endpoint (local vLLM, Ollama, cloud, etc)."""
+
     def __init__(
         self,
         api_key=None,
-        model="openai/gpt-oss-120b",
-        endpoint="https://api.groq.com/openai/v1/chat/completions",
+        model=None,
+        endpoint=None,
         timeout=300,
     ):
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        self.model = model
-        self.endpoint = endpoint
+        """
+        Args:
+            api_key: API key (optional for local endpoints)
+            model: Model name/ID
+            endpoint: Base URL (e.g., http://localhost:8000/v1 or https://api.openai.com/v1)
+            timeout: Request timeout in seconds
+        """
+        self.api_key = api_key or os.getenv("LLM_API_KEY") or "dummy"
+        self.model = model or os.getenv("LLM_MODEL", "default")
+        self.endpoint = endpoint or os.getenv("LLM_ENDPOINT", "http://localhost:8000/v1")
         self.timeout = timeout
 
     def chat(
@@ -31,9 +42,12 @@ class GroqChatModel:
         stream=False,
     ):
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+
+        # Only add auth header if API key is provided
+        if self.api_key and self.api_key != "dummy":
+            headers["Authorization"] = f"Bearer {self.api_key}"
 
         payload = {
             "model": self.model,
@@ -49,8 +63,9 @@ class GroqChatModel:
             payload["tools"] = tools
             payload["tool_choice"] = tool_choice
 
+        url = f"{self.endpoint}/chat/completions"
         response = requests.post(
-            self.endpoint,
+            url,
             headers=headers,
             json=payload,
             timeout=self.timeout,
@@ -62,8 +77,47 @@ class GroqChatModel:
         return response.json()
 
 
+class GroqChatModel(OpenAICompatibleModel):
+    """Groq cloud API (backward compatible wrapper)."""
+
+    def __init__(
+        self,
+        api_key=None,
+        model="openai/gpt-oss-120b",
+        endpoint="https://api.groq.com/openai/v1",
+        timeout=300,
+    ):
+        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        self.model = model
+        self.endpoint = endpoint
+        self.timeout = timeout
+
+
+def get_llm_client():
+    """Factory: Choose backend based on environment variables.
+
+    Priority:
+    1. LLM_ENDPOINT (if set, use OpenAICompatibleModel)
+    2. GROQ_API_KEY (if set, use GroqChatModel)
+    3. Default to OpenAICompatibleModel (for local endpoints)
+    """
+    if os.getenv("LLM_ENDPOINT"):
+        # Local endpoint (vLLM, Ollama, etc)
+        return OpenAICompatibleModel(
+            api_key=os.getenv("LLM_API_KEY"),
+            model=os.getenv("LLM_MODEL", "default"),
+            endpoint=os.getenv("LLM_ENDPOINT"),
+        )
+    elif os.getenv("GROQ_API_KEY"):
+        # Groq cloud
+        return GroqChatModel()
+    else:
+        # Try local endpoint as fallback
+        return OpenAICompatibleModel()
+
+
 if __name__ == "__main__":
-    llm = GroqChatModel()
+    llm = get_llm_client()
 
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
