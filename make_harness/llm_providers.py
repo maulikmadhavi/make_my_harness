@@ -99,7 +99,7 @@ def get_llm_client():
     Priority:
     1. LLM_ENDPOINT (if set, use OpenAICompatibleModel)
     2. GROQ_API_KEY (if set, use GroqChatModel)
-    3. Default to OpenAICompatibleModel (for local endpoints)
+    3. If neither is set, raise an error
     """
     if os.getenv("LLM_ENDPOINT"):
         # Local endpoint (vLLM, Ollama, etc)
@@ -112,6 +112,5 @@ def get_llm_client():
         # Groq cloud
         return GroqChatModel()
     else:
-        # Try local endpoint as fallback
-        return OpenAICompatibleModel()
-
+        # Trigger error as no LLM backend configured via environment variables
+        raise RuntimeError("No LLM backend configured. Set LLM_ENDPOINT or GROQ_API_KEY.")
