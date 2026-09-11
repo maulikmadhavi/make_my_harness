@@ -10,7 +10,7 @@ that either the CLI or the loop calls into.
 
 ```mermaid
 flowchart TD
-    entry["main.py · __main__.py"] --> cli["cli.py<br/>.env loader · text REPL · --tui"]
+    entry["main.py · __main__.py"] --> cli["cli.py<br/>.env loader · REPL"]
     cli --> mentions["mentions.py<br/>@path attachments"]
     cli --> commands["commands.py<br/>/clear"]
     cli --> context["context.py<br/>token budget · compaction"]
@@ -23,8 +23,6 @@ flowchart TD
     loop --> tools["tools.py<br/>registry.execute"]
     toolsets["toolsets/<br/>fs · shell · web · memory · skills"] -- "@tool" --> tools
     loop --> log["log.py<br/>JSONL run log"]
-    cli --> tui["tui/<br/>blocks → render → app"]
-    loop -- on_event --> tui
 
     style cli fill:#2d6a4f,color:#fff
     style loop fill:#2d6a4f,color:#fff
@@ -38,7 +36,7 @@ it readable.
 
 | Component | Role | Called by |
 |---|---|---|
-| `cli.py` | Loads `.env`, builds the system prompt (memory and skills indexes), runs the text REPL or the TUI | `main.py`, `python -m make_harness` |
+| `cli.py` | Loads `.env`, builds the system prompt (memory and skills indexes), runs the REPL | `main.py`, `python -m make_harness` |
 | `loop.py` | `run_turn`: up to 15 LLM round trips; repairs bad tool arguments, short-circuits verbatim repeats, stops on a denial | `cli.py` |
 | `llm.py` | `LLMClient.complete`: normalizes the backend reply, salvages Groq `tool_use_failed`, retries at rising temperature | `loop.py`, `context.py` |
 | `llm_providers.py` | The only HTTP code: `OpenAICompatibleModel`, `GroqChatModel`, the `get_llm_client()` factory | `llm.py` |
@@ -51,9 +49,6 @@ it readable.
 | `commands.py` | Slash-command registry; ships `/clear` | `cli.py` |
 | `log.py` | `RunLog.event`: one JSONL line per event, one file per session | `cli.py`, `loop.py`, `context.py`, `commands.py` |
 | `ui.py` | `bold`, `dim`, `yellow`, `cyan`; pass-through off a TTY or with `NO_COLOR` | `cli.py`, `loop.py`, `policy.py` |
-| `tui/blocks.py` | messages plus reasoning events to a `Block` list with fold state | `cli.py` |
-| `tui/render.py` | `Block` list to prompt_toolkit `FormattedText` | `tui/app.py` |
-| `tui/app.py` | `TranscriptState` and `build_application`: layout, key bindings, input box | `cli.py` |
 
 ## State on disk
 
@@ -68,8 +63,5 @@ All paths are relative to the directory `make-harness` is launched from.
 
 ## Known gaps
 
-- The TUI does not override `Policy._ask`, so a gated tool still prompts
-  on the console underneath the full-screen app. Use the text REPL for
-  writes and shell commands.
 - There is no text-parsed fallback for models without native tool
   calling (plan.md, Stage 9).

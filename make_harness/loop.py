@@ -1,14 +1,8 @@
 """The agent loop: call the LLM, execute requested tools, feed results back.
 
 One run_turn() call handles one user request end to end, up to max_steps
-LLM round-trips. Every request, response, tool call and result is logged.
-
-on_event(kind, **fields), if supplied, is called at every point this
-function would otherwise print() a live trace line, plus once per step
-with the model's reasoning text — letting a caller (the TUI, Stage 17+)
-render its own view instead. When on_event is None (the default), this
-function's printed output and return contract are byte-for-byte
-identical to before it existed.
+LLM round-trips. Every request, response, tool call and result is logged,
+and a one-line trace of each tool call is printed for the REPL.
 """
 
 import json
@@ -41,14 +35,12 @@ SHORT_CIRCUIT_RESULT = (
 DENIED_RESULT = "Denied by user."
 
 
-def run_turn(llm, registry, policy, log, messages, max_steps=15, on_event=None):
+def run_turn(llm, registry, policy, log, messages, max_steps=15):
     last_executed = None  # (name, canonical args) of the last call actually run
     for step in range(max_steps):
         log.event("llm_request", step=step, messages=messages)
         resp = llm.complete(messages, tools=registry.schemas() or None)
         log.event("llm_response", step=step, raw=resp["raw"])
-        if on_event:
-            on_event("reasoning", step=step, text=resp.get("reasoning"))
 
         if not resp["tool_calls"]:
             messages.append({"role": "assistant", "content": resp["content"] or ""})
@@ -75,10 +67,7 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15, on_event=None):
             if args is None:
                 result = f"Error: unparseable tool arguments: {tc['function']['arguments']!r}"
             else:
-                if on_event:
-                    on_event("tool_call", step=step, tool=name, args=args)
-                else:
-                    print(dim(f"  → {name}({json.dumps(args, ensure_ascii=False)[:200]})"))
+                print(dim(f"  → {name}({json.dumps(args, ensure_ascii=False)[:200]})"))
                 log.event("tool_call", step=step, tool=name, args=args, id=tc["id"])
                 signature = (name, json.dumps(args, sort_keys=True))
                 if signature == last_executed:
@@ -87,10 +76,7 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15, on_event=None):
                     # result (not a floating system message) so the
                     # tool_call/tool pairing the API requires stays intact.
                     result = SHORT_CIRCUIT_RESULT
-                    if on_event:
-                        on_event("short_circuit", step=step, tool=name)
-                    else:
-                        print(yellow("  ← short-circuited (identical repeat)"))
+                    print(yellow("  ← short-circuited (identical repeat)"))
                     log.event("short_circuit", step=step, tool=name, id=tc["id"])
                 else:
                     verdict = "deny" if interrupted else policy.check(name, args)
@@ -98,16 +84,10 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15, on_event=None):
                     if verdict == "allow":
                         result = registry.execute(name, args)
                         last_executed = signature
-                        if on_event:
-                            on_event("tool_result", step=step, tool=name, outcome="executed", result=result)
-                        else:
-                            print(dim(f"  ← {len(result)} chars"))
+                        print(dim(f"  ← {len(result)} chars"))
                     else:
                         result = DENIED_RESULT
-                        if on_event:
-                            on_event("tool_result", step=step, tool=name, outcome="denied", result=result)
-                        else:
-                            print(yellow("  ← denied"))
+                        print(yellow("  ← denied"))
                         interrupted = True
             log.event("tool_result", step=step, tool=name, id=tc["id"], result=result[:2000])
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})

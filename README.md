@@ -32,8 +32,6 @@ stage-by-stage execution plan; each stage is one git commit, so
   the agent discovers and loads on demand.
 - **Context compaction**: long conversations are squeezed back under a
   token budget automatically.
-- **Two front ends**: a Rich-styled text REPL (default) and an experimental
-  full-screen TUI (`--tui`) with collapsible reasoning blocks.
 - **Robustness**: repeated identical tool calls are short-circuited,
   malformed tool arguments are repaired, and Groq's `tool_use_failed`
   errors are salvaged or retried — all visible in the log.
@@ -66,7 +64,7 @@ environment, first match wins:
 |---|---|---|---|
 | `LLM_ENDPOINT` | OpenAI-compatible | `LLM_MODEL` (default `default`) | `LLM_ENDPOINT` |
 | `GROQ_API_KEY` (and no `LLM_ENDPOINT`) | Groq | `openai/gpt-oss-120b` | `https://api.groq.com/openai/v1` |
-| neither | OpenAI-compatible | `default` | `http://localhost:8000/v1` |
+| neither | startup fails: `No LLM backend configured. Set LLM_ENDPOINT or GROQ_API_KEY.` | | |
 
 `LLM_API_KEY` is optional: when unset (or `dummy`) no `Authorization`
 header is sent, which is what local servers expect. Set it for OpenAI or
@@ -117,7 +115,6 @@ loader entirely. Keep `.env` out of version control — it holds keys.
 | `GROQ_API_KEY` | selects the Groq backend when `LLM_ENDPOINT` is unset | unset |
 | `TAVILY_API_KEY` / `BRAVE_API_KEY` | enables the `web_search` tool (Tavily wins if both) | unset → tool returns a clear error |
 | `HARNESS_TOKEN_BUDGET` | context-compaction threshold, in ~tokens (chars ÷ 4) | `60000` |
-| `HARNESS_REASONING_FOLD_CHARS` | TUI: reasoning longer than this starts collapsed | `400` |
 | `NO_COLOR` | disables ANSI colors when set | unset → colors on a TTY |
 | `MAKE_HARNESS_NO_ENV` | skip `.env` loading when set | unset |
 
@@ -156,7 +153,7 @@ Requires Python 3.10+; runtime dependencies are `requests`,
 directory — tools like `read_file` / `run_command`, and the `logs/`,
 `memory/` and `skills/` folders, are all relative to wherever you launch it.
 
-## Using the text REPL (default)
+## Using the REPL
 
 ```
 ╭─────────────────────────────────────╮
@@ -205,40 +202,6 @@ you >
 - **`exit`**, **`quit`**, Ctrl+C or Ctrl+D ends the session.
 - Colors switch off automatically when output is piped, or with
   `NO_COLOR=1`.
-
-## Using the TUI (`--tui`, experimental)
-
-```bash
-make-harness --tui
-```
-
-A full-screen layout: header, scrollable transcript, input box, footer.
-The transcript shows `YOU`, `THINKING` (the model's reasoning, when the
-backend returns one), `TOOL` (call + result with a ✓ / ✗ / ⊘ outcome
-mark) and `AGENT` blocks. Reasoning longer than
-`HARNESS_REASONING_FOLD_CHARS` (400) starts collapsed.
-
-| Key | Action |
-|---|---|
-| Enter | submit the input line |
-| ↑ / ↓ | move focus between transcript blocks (only when the input is empty) |
-| Space | collapse / expand the focused reasoning block |
-| PgUp / PgDn, Home / End | scroll the transcript |
-| Esc | clear the input; on an empty input, quit |
-| Ctrl+C / Ctrl+D | quit |
-| `exit` or `quit`, then Enter | quit |
-
-Caveats, all by design of "experimental":
-
-- Requires a real terminal. Without a TTY (piped input, CI) `--tui`
-  silently falls back to the text REPL.
-- **Permission prompts are not wired into the TUI yet.** A gated tool
-  (`write_file`, `run_command`, `http_request`) will try to open a console
-  prompt underneath the full-screen app. Use the text REPL for anything
-  that writes files or runs commands; the TUI is fine for read-only work.
-- Slash-command output is not shown in the TUI; it is written to the log.
-- Works best in Windows Terminal or a Linux terminal; the classic Windows
-  console may not render the box characters.
 
 ## Tools
 
@@ -348,24 +311,23 @@ pytest -q tests/test_loop.py  # one module
 pytest -q -k "denial"         # by keyword
 ```
 
-233 tests, all offline — a scripted stub LLM and stubbed `requests`; no
+183 tests, all offline — a scripted stub LLM and stubbed `requests`; no
 API key, no network, no real terminal. `tests/conftest.py` sets
 `MAKE_HARNESS_NO_ENV` so the suite never reads your `.env`. Coverage by
 module:
 
 | Area | Files | What is checked |
 |---|---|---|
-| Agent loop | `test_loop.py` | short-circuit of repeats, argument repair, denial ends the turn, batch auto-deny, max-steps, unknown tool, log trail, `on_event` hook |
+| Agent loop | `test_loop.py` | short-circuit of repeats, argument repair, denial ends the turn, batch auto-deny, max-steps, unknown tool, log trail |
 | LLM adapter | `test_llm.py`, `test_llm_salvage.py` | `reasoning` pass-through, `tool_use_failed` salvage, retry ladder 0.2 → 0.6 → 1.0, non-retryable errors |
 | Backends | `test_llm_providers.py` | factory priority (`LLM_ENDPOINT` > `GROQ_API_KEY` > local), request payload, auth header only with a key, HTTP error surfacing |
 | Context | `test_context.py` | three compaction steps, tool-pair safety, summary request shape |
 | Tools | `test_tools.py`, `test_fs.py`, `test_shell.py`, `test_web.py`, `test_truncate.py` | schema generation, error wrapping, line caps, exit codes, timeout, Tavily/Brave selection, `http_request` shape |
 | Memory & skills | `test_memory.py`, `test_skills.py` | slugging, save/read round trip, index de-dup, SKILL.md parsing (CRLF, extra fields) |
 | Permission gate | `test_policy.py`, `test_prompt.py` | yes/no/always/deny semantics, `_ask` as the only I/O seam, the pickers |
-| CLI | `test_cli.py`, `test_commands.py`, `test_mentions.py`, `test_repl_pipe.py`, `test_ui.py`, `test_log.py` | `.env` lookup order and no-override rule, `--version`/`--help`/`--tui` fallback, slash-command registry, `@path` expansion, piped-BOM exit, JSONL log format |
-| TUI | `test_tui_blocks.py`, `test_tui_render.py`, `test_tui_app.py` | transcript model, fold state, rendering, headless key bindings |
+| CLI | `test_cli.py`, `test_commands.py`, `test_mentions.py`, `test_repl_pipe.py`, `test_ui.py`, `test_log.py` | `.env` lookup order and no-override rule, `--version` and `--help`, slash-command registry, `@path` expansion, piped-BOM exit, JSONL log format |
 
-Four tests spawn the CLI in a subprocess and one waits out a 1 s shell
+Three tests spawn the CLI in a subprocess and one waits out a 1 s shell
 timeout, so the whole suite takes about 5 s. CI
 (`.github/workflows/test.yml`) runs it on every push.
 
@@ -420,7 +382,7 @@ LLM path, run these in a live session:
 
 ```
 make_harness/
-  cli.py             argparse entry point, .env loader, text REPL, TUI wiring
+  cli.py             argparse entry point, .env loader, the REPL
   commands.py        /clear and other slash commands (registry, not sent to the LLM)
   prompt.py          @ pop-up file picker + permission dropdown (prompt_toolkit)
   mentions.py        @path mention expansion (file/folder attachments)
@@ -433,7 +395,6 @@ make_harness/
   policy.py          permission gate
   context.py         token budget + compaction
   toolsets/          fs, shell, web, memory, skills tool implementations
-  tui/               blocks.py (model) · render.py (formatting) · app.py (Application)
   architecture.md    runtime call graph + component table
   __main__.py        enables `python -m make_harness`
 skills/              SKILL.md packages the agent discovers and can load

@@ -1,14 +1,9 @@
-"""Interactive entry point for the harness.
-
-The default is the Rich-styled text REPL (repl()); `--tui` opts into the
-full-screen prompt_toolkit UI (run_tui_repl(), make_harness/tui/).
-"""
+"""Interactive entry point for the harness: the Rich-styled text REPL."""
 
 import argparse
 import os
 import platform
 import sys
-import threading
 
 from rich.console import Console
 from rich.markup import escape
@@ -41,7 +36,7 @@ def _load_env_file():
                         if line and not line.startswith("#"):
                             key, _, value = line.partition("=")
                             key = key.strip()
-                            value = value.strip().strip('"\'')
+                            value = value.strip().strip("\"'")
                             # Don't override existing env vars, especially GROQ_API_KEY
                             if key and not os.getenv(key):
                                 os.environ[key] = value
@@ -73,8 +68,6 @@ from make_harness.policy import Policy
 from make_harness.prompt import make_input
 from make_harness.tools import registry
 from make_harness.ui import bold, cyan
-from make_harness.tui.app import TranscriptState, build_application
-from make_harness.tui.blocks import build_blocks
 
 SYSTEM_PROMPT = (
     "You are a helpful coding agent running in a minimal local harness on the user's "
@@ -84,79 +77,6 @@ SYSTEM_PROMPT = (
     "If a tool returns an error, report it to the user honestly — never invent a "
     "result you did not get from a tool. Keep answers concise."
 )
-
-
-def run_tui_repl():
-    """Full-screen TUI REPL (--tui): live transcript with collapsible
-    reasoning blocks and an input box. The agent loop runs in a background
-    thread so the UI stays responsive.
-    """
-    llm = LLMClient()
-    log = RunLog()
-    policy = Policy()
-    system = SYSTEM_PROMPT
-    index = memory_index()
-    if index:
-        system += "\n\nPersistent memory index (use read_memory for details):\n" + index
-    skills = skills_index()
-    if skills:
-        system += "\n\nAvailable skills (use load_skill for full instructions):\n" + skills
-    messages = [{"role": "system", "content": system}]
-
-    reasoning_events = []  # one entry per assistant step, fed by on_event
-    state = TranscriptState(blocks=[], folds={})
-
-    def update_transcript():
-        """Rebuild transcript from messages + reasoning."""
-        blocks = build_blocks(messages, reasoning_events, state.folds)
-        state.blocks = blocks
-        state.focused_index = len(blocks) - 1 if blocks else -1
-
-    def on_event(kind, **kwargs):
-        """Callback from run_turn to capture reasoning."""
-        if kind == "reasoning":
-            reasoning_events.append(kwargs.get("text", ""))
-        update_transcript()
-
-    def run_agent_thread(user_input):
-        """Run one agent turn off the UI thread. Errors are logged; the
-        transcript is rebuilt either way so the UI reflects what landed."""
-        try:
-            log.event("user_message", content=user_input, attachments=[])
-            messages.append({"role": "user", "content": user_input})
-            messages[:] = compact(messages, llm, log)
-            run_turn(llm, registry, policy, log, messages, on_event=on_event)
-        except Exception as e:
-            log.event("error", error=f"{type(e).__name__}: {e}")
-        update_transcript()
-
-    def on_submit(text):
-        """Handle a submitted input line (runs on the UI thread)."""
-        if text.lower() in ("exit", "quit"):
-            app.exit()
-            return
-
-        if text.startswith("/"):
-            # Command output isn't rendered in the TUI yet; it is in the log.
-            messages[:], _ = commands.run(text, messages, log)
-            update_transcript()
-            return
-
-        # Expand @mentions
-        expanded, attached = expand_mentions(text)
-        for mention in attached:
-            log.event("mention", attachment=mention)
-
-        # Run agent in background thread
-        threading.Thread(target=run_agent_thread, args=(expanded,), daemon=True).start()
-
-    app = build_application(state, on_submit=on_submit)
-
-    # Run the app (blocking until user quits)
-    try:
-        app.run()
-    except KeyboardInterrupt:
-        pass
 
 
 def repl():
@@ -181,11 +101,13 @@ def repl():
 
     # Rich formatted header
     console.print()
-    console.print(Panel(
-        f"[bold cyan]make-harness[/bold cyan] [dim]v{__version__}[/dim] • [cyan]{llm.model}[/cyan]",
-        expand=False,
-        border_style="cyan"
-    ))
+    console.print(
+        Panel(
+            f"[bold cyan]make-harness[/bold cyan] [dim]v{__version__}[/dim] • [cyan]{llm.model}[/cyan]",
+            expand=False,
+            border_style="cyan",
+        )
+    )
     console.print(f"[dim]log:   {log.path}[/dim]")
     console.print(f"[dim]tools: {tool_names}[/dim]")
     console.print()
@@ -223,12 +145,9 @@ def repl():
             console.print()
             # Text() keeps the answer literal — brackets in code like
             # list[int] must not be parsed as rich markup.
-            console.print(Panel(
-                Text(answer or ""),
-                title="[bold green]agent[/bold green]",
-                border_style="green",
-                expand=False
-            ))
+            console.print(
+                Panel(Text(answer or ""), title="[bold green]agent[/bold green]", border_style="green", expand=False)
+            )
         except Exception as e:
             log.event("error", error=f"{type(e).__name__}: {e}")
             console.print(f"[bold red]error:[/bold red] {escape(str(e))}")
@@ -241,19 +160,9 @@ def main():
         "permissions, memory, and context compaction.",
     )
     parser.add_argument("--version", action="version", version=f"make-harness {__version__}")
-    parser.add_argument(
-        "--tui", action="store_true",
-        help="Use full-screen TUI (experimental, best with bash/linux)"
-    )
-    args = parser.parse_args()
+    parser.parse_args()
 
-    # Use text REPL by default (stable), TUI with explicit --tui flag
-    # TUI requires proper terminal support (works best on bash/linux)
-    use_tui = args.tui and sys.stdin.isatty()
-    if use_tui:
-        run_tui_repl()
-    else:
-        repl()
+    repl()
 
 
 if __name__ == "__main__":

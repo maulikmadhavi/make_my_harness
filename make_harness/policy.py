@@ -12,9 +12,8 @@ A denial — one-off or permanent — is returned to the model as the tool
 result so it can adapt instead of crashing.
 
 _ask() is Policy's only I/O seam — everything printed or read lives
-inside that one call, so a caller (the TUI, Stage 20) can override it
-completely by swapping self._ask, with no risk of a stray print()
-corrupting a full-screen render.
+inside that one call, so a caller (or a test) can override it completely
+by swapping self._ask, with no stray print() to worry about.
 """
 
 import json
