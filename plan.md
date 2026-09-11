@@ -7,7 +7,7 @@ One commit per stage.
 > Stages 7–10 below were re-prioritized on 2026-07-19 after external review
 > by ChatGPT, DeepSeek, and Gemini (repo pasted as a README description, not
 > the code) plus a Nemotron synthesis of all three. See
-> `feedback_/feedback_consolidated.md` for the fact-checked reflection —
+> `feedback/feedback_consolidated.md` for the fact-checked reflection —
 > what those reviews got right, where they were already out of date, and
 > the reasoning behind what's kept vs. cut below.
 >
@@ -154,7 +154,7 @@ committed.
 
 ### [x] Stage 8 — Robustness hardening
 Small, high-value fixes for gaps confirmed by reading the actual code
-(see `feedback_/feedback_consolidated.md` §3), built test-first on the
+(see `feedback/feedback_consolidated.md` §3), built test-first on the
 Stage 7 suite:
 - **Loop short-circuit**: track the last `(tool_name, args)` the loop
   executed; if the model calls the identical tool with identical args
