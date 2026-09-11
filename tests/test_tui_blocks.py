@@ -160,3 +160,38 @@ def test_block_ids_are_stable_across_repeated_calls():
     ids1 = [b.id for b in build_blocks(messages, [None], {})]
     ids2 = [b.id for b in build_blocks(messages, [None], {})]
     assert ids1 == ids2
+
+
+def test_stray_tool_message_is_skipped_not_crashed():
+    messages = [
+        _msg("system", "sys"),
+        _msg("user", "hi"),
+        _msg("tool", "orphan result", tool_call_id="zzz"),  # no preceding tool_calls
+        _msg("assistant", "hello"),
+    ]
+    blocks = build_blocks(messages, [None], {})
+    assert [b.kind for b in blocks] == ["user", "answer"]
+
+
+def test_tool_call_awaiting_its_result_renders_as_pending():
+    # Mid-turn snapshot: the assistant asked for a tool and the result
+    # isn't back yet — what the TUI sees between on_event("tool_call")
+    # and on_event("tool_result").
+    messages = [
+        _msg("system", "sys"),
+        _msg("user", "go"),
+        _msg("assistant", None, tool_calls=[_tool_call("c1", "probe", "{}")]),
+    ]
+    blocks = build_blocks(messages, [None], {})
+    tool_block = next(b for b in blocks if b.kind == "tool")
+    assert tool_block.text == ""
+
+
+def test_block_counters_number_each_kind_independently():
+    messages = [
+        _msg("system", "sys"),
+        _msg("user", "q1"), _msg("assistant", "a1"),
+        _msg("user", "q2"), _msg("assistant", "a2"),
+    ]
+    ids = [b.id for b in build_blocks(messages, ["r1", "r2"], {})]
+    assert ids == ["user-1", "reasoning-1", "answer-1", "user-2", "reasoning-2", "answer-2"]

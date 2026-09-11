@@ -4,6 +4,8 @@ network or API key is needed."""
 
 import json
 
+import pytest
+
 from make_harness.llm import LLMClient
 
 
@@ -69,3 +71,80 @@ def test_salvaged_response_reasoning_degrades_to_none():
     result = client.complete([{"role": "user", "content": "hi"}], retries=0)
     assert result["reasoning"] is None
     assert result["tool_calls"][0]["function"]["name"] == "read_file"
+
+
+# --- retry ladder: tool_use_failed with nothing salvageable -----------------
+
+_UNSALVAGEABLE = (
+    'LLM backend error 400: {"error": {"code": "tool_use_failed", '
+    '"failed_generation": "no function tag in here"}}'
+)
+_GOOD = {"choices": [{"message": {"role": "assistant", "content": "ok"}}], "usage": {}}
+
+
+def _client_failing_n_times(n, error=_UNSALVAGEABLE):
+    """A client whose backend raises `error` for the first n calls, then
+    succeeds; `seen` records the temperature of every attempt."""
+    client = LLMClient(model="stub-model")
+    seen = []
+
+    def chat(messages, tools=None, temperature=None):
+        seen.append(temperature)
+        if len(seen) <= n:
+            raise RuntimeError(error)
+        return _GOOD
+
+    client.backend.chat = chat
+    return client, seen
+
+
+def test_retries_escalate_temperature_then_succeed():
+    client, seen = _client_failing_n_times(2)
+    result = client.complete([{"role": "user", "content": "hi"}])
+    assert seen == [0.2, 0.6, 1.0]
+    assert result["content"] == "ok"
+
+
+def test_gives_up_after_retries_are_exhausted():
+    client, seen = _client_failing_n_times(5)
+    with pytest.raises(RuntimeError):
+        client.complete([{"role": "user", "content": "hi"}], retries=1)
+    assert seen == [0.2, 0.6]
+
+
+def test_retries_zero_means_a_single_attempt():
+    client, seen = _client_failing_n_times(5)
+    with pytest.raises(RuntimeError):
+        client.complete([{"role": "user", "content": "hi"}], retries=0)
+    assert seen == [0.2]
+
+
+def test_other_backend_errors_are_not_retried():
+    client, seen = _client_failing_n_times(5, error="LLM backend error 500: upstream down")
+    with pytest.raises(RuntimeError, match="500"):
+        client.complete([{"role": "user", "content": "hi"}])
+    assert seen == [0.2]
+
+
+def test_model_override_is_applied_to_the_backend():
+    client = LLMClient(model="override-model")
+    assert client.model == "override-model"
+    assert client.backend.model == "override-model"
+
+
+def test_salvaged_response_is_marked_and_carries_a_synthetic_id():
+    client = LLMClient(model="stub-model")
+    error_body = json.dumps({"error": {
+        "code": "tool_use_failed",
+        "failed_generation": '<function=probe{"a": 1}</function>',
+    }})
+
+    def chat(*a, **k):
+        raise RuntimeError(f"LLM backend error 400: {error_body}")
+
+    client.backend.chat = chat
+    result = client.complete([{"role": "user", "content": "hi"}], retries=0)
+    assert result["raw"]["salvaged"] is True
+    assert result["content"] is None
+    assert result["tool_calls"][0]["id"] == "salvaged_0"
+    assert result["tool_calls"][0]["function"] == {"name": "probe", "arguments": '{"a": 1}'}

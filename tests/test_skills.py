@@ -71,3 +71,25 @@ def test_bundled_commit_messages_skill_is_discoverable():
     description, body = found["commit-messages"]
     assert description
     assert "commit" in body.lower()
+
+
+def test_description_keeps_colons_after_the_first(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_skill(tmp_path, "when", name="when", description="Use when: the user says: go")
+    assert skills.discover()["when"][0] == "Use when: the user says: go"
+
+
+def test_crlf_frontmatter_parses(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "skills" / "win"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_bytes(b"---\r\nname: win\r\ndescription: CRLF file.\r\n---\r\nBody line.\r\n")
+    assert skills.discover()["win"] == ("CRLF file.", "Body line.")
+
+
+def test_extra_frontmatter_fields_are_ignored(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    d = tmp_path / "skills" / "extra"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text("---\nname: extra\ndescription: d\nversion: 2\n---\nbody", encoding="utf-8")
+    assert skills.discover()["extra"] == ("d", "body")

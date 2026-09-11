@@ -138,3 +138,14 @@ def test_chooser_non_tty_reprompts_until_matched(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
     ask = make_chooser()
     assert ask("allow? ", _YNAD) == "yes"
+
+
+def test_at_path_into_a_missing_folder_gives_no_completions(tmp_path, monkeypatch):
+    _setup_tree(tmp_path, monkeypatch)
+    assert _completions("@nowhere/") == []
+
+
+def test_choice_completer_replaces_everything_typed():
+    completions = list(ChoiceCompleter(_YNAD).get_completions(Document("  alw"), None))
+    assert [c.text for c in completions] == ["always"]
+    assert completions[0].start_position == -len("  alw")

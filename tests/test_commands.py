@@ -59,3 +59,29 @@ def test_unknown_command_does_not_log():
     log = StubLog()
     commands.run("/nope", _messages(), log)
     assert log.events == []
+
+
+def test_a_new_command_registers_through_the_decorator(monkeypatch):
+    monkeypatch.setattr(commands, "_COMMANDS", dict(commands._COMMANDS))  # sandboxed registry
+
+    @commands.command
+    def shout(messages):
+        """Test-only command."""
+        return messages + [{"role": "user", "content": "LOUD"}], "shouted"
+
+    log = StubLog()
+    new_messages, output = commands.run("/shout now", _messages(), log)
+    assert output == "shouted"
+    assert new_messages[-1] == {"role": "user", "content": "LOUD"}
+    assert log.events == [("command", {"name": "shout", "output": "shouted"})]
+
+
+def test_unknown_command_lists_every_registered_command_sorted(monkeypatch):
+    monkeypatch.setattr(commands, "_COMMANDS", dict(commands._COMMANDS))
+
+    def zebra(messages):
+        return messages, "z"
+
+    commands.command(zebra)
+    _, output = commands.run("/nope", _messages(), StubLog())
+    assert output.endswith("available: /clear, /zebra")

@@ -50,3 +50,60 @@ def test_schema_from_signature_and_docstring():
         "excited": {"type": "boolean"},
     }
     assert schema["parameters"]["required"] == ["name"]
+
+
+def test_numeric_and_unannotated_parameters_map_to_json_types():
+    reg = Registry()
+
+    @reg.tool
+    def calc(count: int, ratio: float, flag: bool, label: str, mystery, opt=None) -> str:
+        """Typed."""
+        return "ok"
+
+    parameters = reg.schemas()[0]["function"]["parameters"]
+    assert parameters["properties"] == {
+        "count": {"type": "integer"},
+        "ratio": {"type": "number"},
+        "flag": {"type": "boolean"},
+        "label": {"type": "string"},
+        "mystery": {"type": "string"},  # no annotation -> string
+        "opt": {"type": "string"},
+    }
+    assert parameters["required"] == ["count", "ratio", "flag", "label", "mystery"]
+
+
+def test_missing_docstring_gives_an_empty_description():
+    reg = Registry()
+
+    @reg.tool
+    def undocumented() -> str:
+        return "x"
+
+    assert reg.schemas()[0]["function"]["description"] == ""
+
+
+def test_decorator_returns_the_original_function():
+    reg = Registry()
+
+    def raw(x: str) -> str:
+        """Raw."""
+        return x.upper()
+
+    assert reg.tool(raw) is raw
+    assert raw("a") == "A"
+
+
+def test_schemas_preserve_registration_order():
+    reg = _make_registry()
+    assert [s["function"]["name"] for s in reg.schemas()] == ["greet", "boom"]
+
+
+def test_execute_result_is_always_a_string():
+    reg = Registry()
+
+    @reg.tool
+    def number() -> int:
+        """Returns an int."""
+        return 42
+
+    assert reg.execute("number", {}) == "42"

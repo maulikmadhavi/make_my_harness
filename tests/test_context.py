@@ -5,7 +5,9 @@ live, and never committed): stub path, summarize path, tool-pair cut
 safety, and the step-3 last resort that fixed the live no-op bug.
 """
 
-from make_harness.context import compact, estimate_tokens
+import json
+
+from make_harness.context import SUMMARY_PROMPT, _safe_cut, compact, estimate_tokens
 
 
 class StubLLM:
@@ -145,3 +147,58 @@ def test_step3_stubs_recent_tools_when_nothing_older_exists():
     assert out[2]["content"].endswith("…[stubbed by compaction]")
     assert estimate_tokens(out) <= 300
     assert _pairing_ok(out)
+
+
+# --- helpers and the summary request itself --------------------------------
+
+def test_safe_cut_moves_past_tool_results():
+    msgs = [
+        _msg("system", "s"),
+        _msg("assistant", None, tool_calls=[]),
+        _msg("tool", "r1", tool_call_id="a"),
+        _msg("tool", "r2", tool_call_id="b"),
+        _msg("user", "next"),
+    ]
+    assert _safe_cut(msgs, 2) == 4
+    assert _safe_cut(msgs, 4) == 4  # already on a non-tool message
+    assert _safe_cut(msgs, 5) == 5  # past the end is left alone
+
+
+def test_estimate_tokens_is_roughly_chars_over_four():
+    estimate = estimate_tokens([_msg("user", "x" * 400)])
+    assert 100 <= estimate <= 110  # 400 chars plus a little JSON overhead
+
+
+class RecordingLLM(StubLLM):
+    def __init__(self):
+        self.requests = []
+
+    def complete(self, messages, tools=None):
+        self.requests.append(messages)
+        return super().complete(messages, tools)
+
+
+def test_summary_request_carries_the_prompt_and_the_old_messages():
+    msgs = [_msg("system", "sys")]
+    old = [_msg("user" if i % 2 == 0 else "assistant", f"old {i} " + "y" * 3000) for i in range(6)]
+    msgs += old
+    msgs += [_msg("user", f"recent {i}") for i in range(8)]
+    llm = RecordingLLM()
+    compact(msgs, llm, StubLog(), budget=estimate_tokens(msgs) // 2)
+    assert len(llm.requests) == 1
+    request = llm.requests[0]
+    assert request[0] == {"role": "system", "content": SUMMARY_PROMPT}
+    assert request[1]["role"] == "user"
+    assert json.loads(request[1]["content"]) == old
+
+
+def test_summary_with_no_content_does_not_crash():
+    class EmptyLLM(StubLLM):
+        def complete(self, messages, tools=None):
+            return {"content": None, "tool_calls": [], "usage": {}, "raw": {}}
+
+    msgs = [_msg("system", "sys")]
+    msgs += [_msg("user", "y" * 3000) for _ in range(6)]
+    msgs += [_msg("user", f"recent {i}") for i in range(8)]
+    out = compact(msgs, EmptyLLM(), StubLog(), budget=estimate_tokens(msgs) // 2)
+    assert out[1]["content"] == "[Conversation so far, compacted by the harness]\n"
