@@ -1,7 +1,10 @@
-# Minimal CI: run the pytest suite on every push and PR.
-# Deliberately pip-based (not pixi) — CI only needs the package plus
-# pytest, not the full dev environment. No lint step yet (see plan.md
-# Stage 7: not worth the config until the suite itself has settled).
+# CI: run the pytest suite, and build the distribution via the pixi task.
+#
+# The test job is deliberately pip-based (not pixi) — it only needs the
+# package plus pytest, not the full dev environment. The build job does use
+# pixi, because `build` is defined as a pixi task in pixi.toml and running it
+# through pixi is what keeps CI and local `pixi run build` identical.
+# No lint step yet (see plan.md Stage 7).
 name: test
 
 on:
@@ -9,12 +12,20 @@ on:
   pull_request:
 
 jobs:
-  test:
+
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: prefix-dev/setup-pixi@v0.10.2
         with:
-          python-version: "3.12"
-      - run: pip install -e . pytest
-      - run: pytest -q
+          manifest-path: pixi.toml
+          # fail if pixi.lock is out of date with pixi.toml
+          locked: true
+          cache: true
+      - run: pixi run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
