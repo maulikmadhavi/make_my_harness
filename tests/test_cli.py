@@ -135,3 +135,27 @@ def test_help_flag(tmp_path):
     proc = _run_cli("--help", cwd=tmp_path)
     assert proc.returncode == 0
     assert "make-harness" in proc.stdout.decode()
+
+
+# --- _load_env_file encoding ------------------------------------------------
+
+def test_reads_a_utf8_bom_env_file_without_mangling_the_first_key(env_sandbox):
+    tmp_path, _ = env_sandbox
+    # Notepad and PowerShell's Set-Content both write UTF-8 with a BOM. Read
+    # under the locale encoding the BOM became part of the first key's name,
+    # so the setting silently vanished.
+    (tmp_path / ".env").write_bytes("﻿MH_TEST_ALPHA=one\n".encode("utf-8"))
+    cli._load_env_file()
+    assert os.environ["MH_TEST_ALPHA"] == "one"
+
+
+def test_an_undecodable_env_file_is_skipped_rather_than_crashing(env_sandbox):
+    tmp_path, home = env_sandbox
+    # UTF-16 raises UnicodeDecodeError, which is a ValueError — not an OSError,
+    # so it used to escape the loader and crash at import time.
+    (tmp_path / ".env").write_bytes("MH_TEST_ALPHA=utf16\n".encode("utf-16"))
+    (home / ".make_harness").mkdir()
+    _write_env(home / ".make_harness" / ".env", "MH_TEST_HOME=from-home\n")
+    cli._load_env_file()
+    assert os.environ["MH_TEST_HOME"] == "from-home"
+    assert "MH_TEST_ALPHA" not in os.environ

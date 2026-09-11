@@ -12,11 +12,9 @@ from rich.text import Text
 
 
 def _load_env_file():
-    """Load .env file if it exists (project root).
-
-    Skipped if: GROQ_API_KEY is set (test override), or MAKE_HARNESS_NO_ENV is set.
+    """Load the first readable .env file found, without overriding the real
+    environment. Skipped entirely when MAKE_HARNESS_NO_ENV is set.
     """
-    # Skip if explicitly disabled or running in test with GROQ_API_KEY override
     if os.getenv("MAKE_HARNESS_NO_ENV"):
         return
 
@@ -28,27 +26,33 @@ def _load_env_file():
     ]
 
     for env_path in candidates:
-        if os.path.isfile(env_path):
-            try:
-                with open(env_path) as f:
-                    for line in f:
-                        line = line.strip()
-                        if line and not line.startswith("#"):
-                            key, _, value = line.partition("=")
-                            key = key.strip()
-                            value = value.strip().strip("\"'")
-                            # Don't override existing env vars, especially GROQ_API_KEY
-                            if key and not os.getenv(key):
-                                os.environ[key] = value
-                break  # Stop after first successful load
-            except (IOError, OSError):
+        if not os.path.isfile(env_path):
+            continue
+        try:
+            # utf-8-sig, not the locale encoding: a .env written by Notepad or
+            # PowerShell carries a BOM, which would otherwise be read as part
+            # of the first key's name and silently drop that setting. Same
+            # class of bug as the piped-stdin BOM handled in repl().
+            with open(env_path, encoding="utf-8-sig") as f:
+                text = f.read()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
                 continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            # Don't override existing env vars — the real shell always wins.
+            if key and not os.getenv(key):
+                os.environ[key] = value.strip().strip("\"'")
+        return  # Stop after the first file that loaded
 
 
+# Runs at import, not in main(): context.TOKEN_BUDGET and ui.ENABLED read their
+# environment variables at *their* import time, below, so the file has to be
+# loaded before those modules are imported.
 _load_env_file()
-
-# Rich console for polished output
-console = Console()
 
 # Importing a toolset registers its tools with the shared registry.
 import make_harness.toolsets.fs  # noqa: F401
@@ -80,6 +84,10 @@ SYSTEM_PROMPT = (
 
 
 def repl():
+    # Built here rather than at module scope so `--version` doesn't pay for it,
+    # and so make_harness.ui (imported above) has already switched the legacy
+    # Windows console into VT mode before rich caches its render-path decision.
+    console = Console()
     if not sys.stdin.isatty():
         # Piped input: decode as UTF-8 and swallow a leading BOM —
         # PowerShell 5.1 pipes one in, and under the default cp1252

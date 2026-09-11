@@ -45,7 +45,11 @@ class LLMClient:
         # malformed tool syntax (e.g. <function=name{...}</function>). The
         # error body contains the intended call, so first try to salvage it;
         # otherwise retry at a higher temperature to break the determinism.
-        for attempt, temperature in enumerate([0.2, 0.6, 1.0][: retries + 1]):
+        # The ladder caps at three rungs, so `retries` above 2 buys no extra
+        # attempts — give up on the last rung we actually have, not on the
+        # requested count, or the loop falls through with `raw` unbound.
+        temperatures = [0.2, 0.6, 1.0][: retries + 1]
+        for attempt, temperature in enumerate(temperatures):
             try:
                 raw = self.backend.chat(messages, tools=tools, temperature=temperature)
                 break
@@ -74,7 +78,7 @@ class LLMClient:
                         "salvaged": True,
                     }
                     break
-                if attempt == retries:
+                if attempt == len(temperatures) - 1:
                     raise
         msg = raw["choices"][0]["message"]
         return {

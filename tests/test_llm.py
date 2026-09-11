@@ -148,3 +148,14 @@ def test_salvaged_response_is_marked_and_carries_a_synthetic_id():
     assert result["content"] is None
     assert result["tool_calls"][0]["id"] == "salvaged_0"
     assert result["tool_calls"][0]["function"] == {"name": "probe", "arguments": '{"a": 1}'}
+
+
+def test_retries_beyond_the_temperature_ladder_raise_the_backend_error():
+    # The ladder has only three rungs, so retries > 2 buys no extra attempts.
+    # Giving up on `retries` rather than on the last real rung let the loop
+    # fall through with `raw` unbound — an UnboundLocalError masking the
+    # backend error the caller needed to see.
+    client, seen = _client_failing_n_times(99)
+    with pytest.raises(RuntimeError, match="tool_use_failed"):
+        client.complete([{"role": "user", "content": "hi"}], retries=5)
+    assert seen == [0.2, 0.6, 1.0]

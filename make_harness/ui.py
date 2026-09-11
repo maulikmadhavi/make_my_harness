@@ -1,4 +1,9 @@
-"""Tiny ANSI styling helpers for the REPL — stdlib only, no rich/colorama.
+"""Tiny ANSI styling helpers that emit raw escape codes, not rich markup.
+
+cli.py renders its panels through rich, but two callers cannot: prompt_toolkit
+takes ANSI (see prompt.py's ANSI() wrapper), and loop.py/policy.py print their
+trace lines straight to stdout. Those are what this module is for — it is a
+deliberate second styling path, not a leftover from before rich was added.
 
 Styling is disabled when stdout is not a TTY or NO_COLOR is set
 (https://no-color.org), so piped output and logs stay clean. On Windows,

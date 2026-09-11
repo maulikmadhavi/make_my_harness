@@ -92,7 +92,9 @@ def test_chat_posts_to_chat_completions(fake_post, clean_env):
     assert call["json"]["model"] == "m"
     assert call["json"]["messages"] == [{"role": "user", "content": "hi"}]
     assert call["json"]["temperature"] == 0.2
-    assert call["json"]["stream"] is False
+    # No "stream" key: the client only ever reads a whole JSON body, so it must
+    # not advertise streaming. OpenAI-compatible servers default to non-streaming.
+    assert "stream" not in call["json"]
     assert out == {"choices": [{"message": {"content": "ok"}}]}
 
 

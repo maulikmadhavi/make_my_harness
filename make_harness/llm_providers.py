@@ -27,7 +27,7 @@ class OpenAICompatibleModel:
             endpoint: Base URL (e.g., http://localhost:8000/v1 or https://api.openai.com/v1)
             timeout: Request timeout in seconds
         """
-        self.api_key = api_key or os.getenv("LLM_API_KEY") or "dummy"
+        self.api_key = api_key or os.getenv("LLM_API_KEY") or None
         self.model = model or os.getenv("LLM_MODEL", "default")
         self.endpoint = endpoint or os.getenv("LLM_ENDPOINT", "http://localhost:8000/v1")
         self.timeout = timeout
@@ -39,21 +39,19 @@ class OpenAICompatibleModel:
         tool_choice="auto",
         temperature=0.2,
         max_tokens=None,
-        stream=False,
     ):
         headers = {
             "Content-Type": "application/json",
         }
 
         # Only add auth header if API key is provided
-        if self.api_key and self.api_key != "dummy":
+        if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         payload = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
-            "stream": stream,
         }
 
         if max_tokens is not None:
@@ -87,10 +85,9 @@ class GroqChatModel(OpenAICompatibleModel):
         endpoint="https://api.groq.com/openai/v1",
         timeout=300,
     ):
+        super().__init__(api_key=api_key, model=model, endpoint=endpoint, timeout=timeout)
+        # Groq reads its own key variable; everything else the base class set stands.
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
-        self.model = model
-        self.endpoint = endpoint
-        self.timeout = timeout
 
 
 def get_llm_client():
@@ -102,12 +99,9 @@ def get_llm_client():
     3. If neither is set, raise an error
     """
     if os.getenv("LLM_ENDPOINT"):
-        # Local endpoint (vLLM, Ollama, etc)
-        return OpenAICompatibleModel(
-            api_key=os.getenv("LLM_API_KEY"),
-            model=os.getenv("LLM_MODEL", "default"),
-            endpoint=os.getenv("LLM_ENDPOINT"),
-        )
+        # Local endpoint (vLLM, Ollama, etc). The constructor reads
+        # LLM_API_KEY / LLM_MODEL / LLM_ENDPOINT itself — don't restate them here.
+        return OpenAICompatibleModel()
     elif os.getenv("GROQ_API_KEY"):
         # Groq cloud
         return GroqChatModel()

@@ -17,3 +17,6 @@ make-harness = "make_harness.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["make_harness"]
+# hatch packages everything under make_harness/, so the nested pixi workspace
+# and its 40KB lockfile would otherwise ship inside the installed package.
+exclude = ["pixi.toml", "pixi.lock", ".gitignore", ".gitattributes"]
