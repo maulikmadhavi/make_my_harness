@@ -64,12 +64,9 @@ def test_factory_uses_groq_when_only_the_groq_key_is_set(clean_env, monkeypatch)
     assert client.model == "openai/gpt-oss-120b"
 
 
-def test_factory_defaults_to_a_local_endpoint(clean_env):
-    client = get_llm_client()
-    assert type(client) is OpenAICompatibleModel
-    assert client.endpoint == "http://localhost:8000/v1"
-    assert client.model == "default"
-    assert client.api_key == "dummy"
+def test_factory_raises_when_nothing_is_configured(clean_env):
+    with pytest.raises(RuntimeError, match="LLM_ENDPOINT or GROQ_API_KEY"):
+        get_llm_client()
 
 
 def test_explicit_constructor_args_beat_the_environment(clean_env, monkeypatch):

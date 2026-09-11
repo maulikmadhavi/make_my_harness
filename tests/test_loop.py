@@ -40,16 +40,6 @@ class DenyAll:
         return "deny"
 
 
-class EventCollector:
-    """Collects on_event(kind, **fields) calls as (kind, fields) tuples."""
-
-    def __init__(self):
-        self.events = []
-
-    def __call__(self, kind, **fields):
-        self.events.append((kind, fields))
-
-
 class StubLog:
     def __init__(self):
         self.events = []
@@ -213,7 +203,7 @@ def test_short_circuit_skips_the_permission_prompt():
     assert policy.checked == ["probe"]  # not re-prompted for the repeat
 
 
-def test_default_on_event_none_still_prints(capsys):
+def test_trace_lines_are_printed_for_each_tool_call(capsys):
     llm = ScriptedLLM([
         {"tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]},
         {"content": "done"},
@@ -223,76 +213,6 @@ def test_default_on_event_none_still_prints(capsys):
     out = capsys.readouterr().out
     assert "probe" in out
     assert "chars" in out
-
-
-def test_on_event_suppresses_the_default_prints(capsys):
-    llm = ScriptedLLM([
-        {"tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]},
-        {"content": "done"},
-    ])
-    reg, _ = _make_registry()
-    run_turn(llm, reg, AllowAll(), StubLog(), [{"role": "user", "content": "go"}], on_event=EventCollector())
-    assert capsys.readouterr().out == ""
-
-
-def test_on_event_fires_reasoning_once_per_step_unconditionally():
-    llm = ScriptedLLM([
-        {"tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')], "reasoning": "let me check the file"},
-        {"content": "done", "reasoning": "I have the answer"},
-    ])
-    reg, _ = _make_registry()
-    collector = EventCollector()
-    run_turn(llm, reg, AllowAll(), StubLog(), [{"role": "user", "content": "go"}], on_event=collector)
-    reasoning_events = [e for e in collector.events if e[0] == "reasoning"]
-    assert reasoning_events == [
-        ("reasoning", {"step": 0, "text": "let me check the file"}),
-        ("reasoning", {"step": 1, "text": "I have the answer"}),
-    ]
-
-
-def test_on_event_reasoning_defaults_to_none_when_absent():
-    llm = ScriptedLLM([{"content": "done"}])
-    reg, _ = _make_registry()
-    collector = EventCollector()
-    run_turn(llm, reg, AllowAll(), StubLog(), [{"role": "user", "content": "go"}], on_event=collector)
-    assert collector.events == [("reasoning", {"step": 0, "text": None})]
-
-
-def test_on_event_fires_for_tool_call_and_executed_result():
-    llm = ScriptedLLM([
-        {"tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]},
-        {"content": "done"},
-    ])
-    reg, _ = _make_registry()
-    collector = EventCollector()
-    run_turn(llm, reg, AllowAll(), StubLog(), [{"role": "user", "content": "go"}], on_event=collector)
-    kinds = [kind for kind, _ in collector.events]
-    assert kinds == ["reasoning", "tool_call", "tool_result", "reasoning"]
-    tool_call_fields = next(f for k, f in collector.events if k == "tool_call")
-    assert tool_call_fields == {"step": 0, "tool": "probe", "args": {"path": "x.py"}}
-    tool_result_fields = next(f for k, f in collector.events if k == "tool_result")
-    assert tool_result_fields == {"step": 0, "tool": "probe", "outcome": "executed", "result": "content of x.py"}
-
-
-def test_on_event_fires_for_short_circuit():
-    llm = ScriptedLLM([
-        {"tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]},
-        {"tool_calls": [_tc("c2", "probe", '{"path": "x.py"}')]},
-        {"content": "done"},
-    ])
-    reg, _ = _make_registry()
-    collector = EventCollector()
-    run_turn(llm, reg, AllowAll(), StubLog(), [{"role": "user", "content": "go"}], on_event=collector)
-    assert ("short_circuit", {"step": 1, "tool": "probe"}) in collector.events
-
-
-def test_on_event_fires_for_denial():
-    llm = ScriptedLLM([{"tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]}])
-    reg, _ = _make_registry()
-    collector = EventCollector()
-    run_turn(llm, reg, DenyAll(), StubLog(), [{"role": "user", "content": "go"}], on_event=collector)
-    tool_result_fields = next(f for k, f in collector.events if k == "tool_result")
-    assert tool_result_fields == {"step": 0, "tool": "probe", "outcome": "denied", "result": "Denied by user."}
 
 
 # --- denial, step exhaustion, and the log trail ----------------------------

@@ -115,13 +115,13 @@ def test_system_prompt_names_the_platform_and_cwd():
 
 # --- argparse entry point, end to end --------------------------------------
 
-def _run_cli(*args, cwd, stdin=b""):
+def _run_cli(*args, cwd):
     env = {k: v for k, v in os.environ.items()
            if k not in {"GROQ_API_KEY", "LLM_ENDPOINT", "LLM_MODEL", "LLM_API_KEY"}}
     env["MAKE_HARNESS_NO_ENV"] = "1"
     return subprocess.run(
         [sys.executable, "-m", "make_harness", *args],
-        input=stdin, capture_output=True, cwd=cwd, timeout=60, env=env,
+        input=b"", capture_output=True, cwd=cwd, timeout=60, env=env,
     )
 
 
@@ -131,15 +131,7 @@ def test_version_flag(tmp_path):
     assert proc.stdout.decode().strip() == f"make-harness {__version__}"
 
 
-def test_help_lists_the_tui_flag(tmp_path):
+def test_help_flag(tmp_path):
     proc = _run_cli("--help", cwd=tmp_path)
     assert proc.returncode == 0
-    assert "--tui" in proc.stdout.decode()
-
-
-def test_tui_flag_falls_back_to_the_text_repl_without_a_tty(tmp_path):
-    proc = _run_cli("--tui", cwd=tmp_path, stdin=b"exit\n")
-    out = proc.stdout.decode("utf-8", errors="replace")
-    assert proc.returncode == 0
-    assert "make-harness" in out  # the text banner, not a full-screen app
-    assert "Shortcuts" in out
+    assert "make-harness" in proc.stdout.decode()

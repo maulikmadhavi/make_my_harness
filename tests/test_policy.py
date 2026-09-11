@@ -70,7 +70,7 @@ def test_eof_and_keyboard_interrupt_deny_safely():
 def test_ask_is_the_only_io_seam(capsys):
     # A stubbed _ask means check() must not print anything itself --
     # the permission description used to be a separate print() call
-    # that a TUI override (Stage 20) couldn't have suppressed.
+    # that an _ask override couldn't have suppressed.
     policy = _make_policy(["yes"])
     policy.check("write_file", {"path": "x.py"})
     assert capsys.readouterr().out == ""
