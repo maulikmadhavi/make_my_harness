@@ -1,0 +1,22 @@
+[workspace]
+authors = ["Maulik Madhavi <maulikmadhavi@gmail.com>"]
+channels = ["conda-forge"]
+name = "make_harness"
+platforms = ["win-64", "linux-64"]
+version = "0.1.0"
+
+[tasks]
+start = "make-harness"
+test = { cmd = "pytest", cwd = ".." }
+build = { cmd = "python -m build --outdir dist", cwd = ".." }
+
+[dependencies]
+python = "==3.12"
+pip = ">=26.1.2,<27"
+pytest = ">=8"
+setuptools = ">=80"
+python-build = ">=1.2"
+
+[pypi-dependencies]
+make-harness = { path = "..", editable = true }
+rich = ">=13.0"
