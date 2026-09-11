@@ -115,15 +115,3 @@ def get_llm_client():
         # Try local endpoint as fallback
         return OpenAICompatibleModel()
 
-
-if __name__ == "__main__":
-    llm = get_llm_client()
-
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Explain transformers in one paragraph."},
-    ]
-
-    response = llm.chat(messages)
-
-    print(response["choices"][0]["message"]["content"])

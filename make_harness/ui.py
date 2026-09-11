@@ -27,14 +27,6 @@ def dim(text):
     return _wrap("2", text)
 
 
-def red(text):
-    return _wrap("31", text)
-
-
-def green(text):
-    return _wrap("32", text)
-
-
 def yellow(text):
     return _wrap("33", text)
 

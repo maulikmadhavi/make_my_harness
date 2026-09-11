@@ -1,6 +1,7 @@
-"""Interactive REPL entry point for the harness.
+"""Interactive entry point for the harness.
 
-Stage 22: Uses full-screen TUI (make_harness/tui/app.py) for prettier output.
+The default is the Rich-styled text REPL (repl()); `--tui` opts into the
+full-screen prompt_toolkit UI (run_tui_repl(), make_harness/tui/).
 """
 
 import argparse
@@ -8,7 +9,6 @@ import os
 import platform
 import sys
 import threading
-from queue import Queue, Empty
 
 from rich.console import Console
 from rich.markup import escape
@@ -72,7 +72,7 @@ from make_harness.loop import run_turn
 from make_harness.policy import Policy
 from make_harness.prompt import make_input
 from make_harness.tools import registry
-from make_harness.ui import bold, cyan, dim, green, red
+from make_harness.ui import bold, cyan
 from make_harness.tui.app import TranscriptState, build_application
 from make_harness.tui.blocks import build_blocks
 
@@ -87,10 +87,9 @@ SYSTEM_PROMPT = (
 
 
 def run_tui_repl():
-    """Stage 22: Full-screen TUI REPL with live transcript and input box.
-
-    Uses threading to run the agent loop in the background while the TUI
-    remains responsive to user input.
+    """Full-screen TUI REPL (--tui): live transcript with collapsible
+    reasoning blocks and an input box. The agent loop runs in a background
+    thread so the UI stays responsive.
     """
     llm = LLMClient()
     log = RunLog()
@@ -104,12 +103,8 @@ def run_tui_repl():
         system += "\n\nAvailable skills (use load_skill for full instructions):\n" + skills
     messages = [{"role": "system", "content": system}]
 
-    # TUI state
-    reasoning_events = []  # Populated by on_event callback
+    reasoning_events = []  # one entry per assistant step, fed by on_event
     state = TranscriptState(blocks=[], folds={})
-
-    # Thread-safe queue for agent results
-    agent_queue = Queue()
 
     def update_transcript():
         """Rebuild transcript from messages + reasoning."""
@@ -124,32 +119,26 @@ def run_tui_repl():
         update_transcript()
 
     def run_agent_thread(user_input):
-        """Run the agent loop in a background thread."""
+        """Run one agent turn off the UI thread. Errors are logged; the
+        transcript is rebuilt either way so the UI reflects what landed."""
         try:
             log.event("user_message", content=user_input, attachments=[])
             messages.append({"role": "user", "content": user_input})
-
-            messages_before = len(messages)
             messages[:] = compact(messages, llm, log)
-            answer = run_turn(
-                llm, registry, policy, log, messages,
-                on_event=on_event
-            )
-            update_transcript()
-            agent_queue.put(("done", None))
+            run_turn(llm, registry, policy, log, messages, on_event=on_event)
         except Exception as e:
             log.event("error", error=f"{type(e).__name__}: {e}")
-            agent_queue.put(("error", str(e)))
+        update_transcript()
 
     def on_submit(text):
-        """Handle user input submission."""
+        """Handle a submitted input line (runs on the UI thread)."""
         if text.lower() in ("exit", "quit"):
-            # Signal exit to the app
-            agent_queue.put(("exit", None))
+            app.exit()
             return
 
         if text.startswith("/"):
-            messages[:], output = commands.run(text, messages, log)
+            # Command output isn't rendered in the TUI yet; it is in the log.
+            messages[:], _ = commands.run(text, messages, log)
             update_transcript()
             return
 

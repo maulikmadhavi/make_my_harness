@@ -1,23 +1,20 @@
-"""Full-screen Application: layout, scrolling, and fold/focus key
-bindings over the render.py/blocks.py model.
-
-Stage 19-20: Static demo with scrolling and fold/focus.
-Stage 21: Adds editable input buffer at the bottom.
-Stage 22: Integrates with live agent loop.
+"""Full-screen Application: layout, scrolling, fold/focus key bindings
+and the input box, over the render.py/blocks.py model. Wired to the
+live agent loop by make_harness/cli.py::run_tui_repl.
 """
 
 from prompt_toolkit import Application
 from prompt_toolkit.data_structures import Point
-from prompt_toolkit.document import Document
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.key_binding.bindings.scroll import scroll_page_down, scroll_page_up
 from prompt_toolkit.layout import Layout, Window
-from prompt_toolkit.layout.containers import HSplit, VSplit
+from prompt_toolkit.layout.containers import HSplit
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.buffer import Buffer
 from prompt_toolkit.styles import Style
 
+from make_harness import __version__
 from make_harness.tui.render import render_blocks
 
 STYLE = Style.from_dict({
@@ -42,12 +39,9 @@ STYLE = Style.from_dict({
     # Separators & focus
     "border": "fg:#334155",
     "focus": "fg:#00d084",
-    "focus.bg": "bg:#1e293b",
 
     # Metadata
     "meta": "fg:#475569",
-    "meta.bold": "bold fg:#64748b",
-    "token.count": "fg:#94a3b8",
 
     # Status
     "status": "fg:#64748b bg:#0f172a",
@@ -97,33 +91,30 @@ class TranscriptState:
         return row
 
 
-def build_application(state, input_buffer=None, input=None, output=None, on_submit=None):
-    """Build the Application with editable input buffer (Stage 21).
+def build_application(state, input=None, output=None, on_submit=None):
+    """Build the full-screen Application: header, transcript, input box, footer.
 
     Args:
         state: TranscriptState holding blocks and fold state
-        input_buffer: Optional Buffer for user input (Stage 21+). If None, no input box.
         input/output: TTY I/O for tests (create_pipe_input + DummyOutput)
-        on_submit: Optional callback(text) when user submits input
+        on_submit: callback(text) for each non-empty submitted line
     """
 
-    # Create input buffer if not provided (Stage 21)
-    if input_buffer is None:
-        def on_input_accept(_):
-            """Handle Enter key in input buffer."""
-            text = input_buffer.text.strip()
-            if text and on_submit:
-                on_submit(text)
-                input_buffer.text = ""
+    def on_input_accept(_):
+        """Enter in the input box: hand the line to on_submit, then clear."""
+        text = input_buffer.text.strip()
+        if text and on_submit:
+            on_submit(text)
+            input_buffer.text = ""
 
-        input_buffer = Buffer(multiline=False, completer=None, accept_handler=on_input_accept)
+    input_buffer = Buffer(multiline=False, accept_handler=on_input_accept)
 
     # Header bar
     header_text = FormattedTextControl(
         lambda: [
             ("class:status.active", "make_harness"),
-            ("class:status", " v0.1.0 • "),
-            ("class:status", "⬆↓ navigate  Space/Enter fold (transcript)  Enter submit (input)  Ctrl+C quit"),
+            ("class:status", f" v{__version__} • "),
+            ("class:status", "↑↓ navigate  Space fold  PgUp/PgDn scroll  Enter submit  Esc clear/quit  Ctrl+C quit"),
         ]
     )
     header_window = Window(content=header_text, height=1, style="class:status")
@@ -136,7 +127,7 @@ def build_application(state, input_buffer=None, input=None, output=None, on_subm
     )
     transcript_window = Window(content=transcript_control, wrap_lines=True, always_hide_cursor=True)
 
-    # Input box (Stage 21) - focused by default
+    # Input box (focused by default)
     input_control = BufferControl(
         buffer=input_buffer,
         input_processors=[],
@@ -233,45 +224,3 @@ def build_application(state, input_buffer=None, input=None, output=None, on_subm
         input=input,
         output=output,
     )
-
-
-def _demo_blocks():
-    from make_harness.tui.blocks import Block
-
-    blocks = []
-    for i in range(1, 9):
-        blocks.append(Block(id=f"user-{i}", kind="user", text=f"Demo question number {i}?"))
-        blocks.append(Block(
-            id=f"reasoning-{i}", kind="reasoning",
-            text=f"Reasoning for question {i}. " * 30,
-            collapsible=True, collapsed=(i % 2 == 0),
-        ))
-        blocks.append(Block(id=f"answer-{i}", kind="answer", text=f"This is demo answer {i}."))
-    return blocks
-
-
-def run_demo():
-    """Demo with interactive input (Stage 21).
-
-    Try:
-    - Click input box and type, press Enter to submit
-    - Escape to clear input
-    - Up/Down: move focus between blocks (when input is empty)
-    - Space/Enter: collapse/expand reasoning (when input is empty)
-    - PgUp/PgDn: scroll (when input is empty)
-    - Ctrl+C: quit
-    """
-    state = TranscriptState(blocks=_demo_blocks())
-
-    def on_demo_submit(text):
-        """Echo user input as a demo."""
-        from make_harness.tui.blocks import Block
-        state.blocks.append(Block(id=f"user-demo-{len(state.blocks)}", kind="user", text=text))
-        state.blocks.append(Block(id=f"answer-demo-{len(state.blocks)}", kind="answer", text=f"You said: {text}"))
-        state.focused_index = len(state.blocks) - 1
-
-    build_application(state, on_submit=on_demo_submit).run()
-
-
-if __name__ == "__main__":
-    run_demo()

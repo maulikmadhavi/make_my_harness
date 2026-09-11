@@ -8,7 +8,7 @@ def test_disabled_passthrough(monkeypatch):
     monkeypatch.setattr(ui, "ENABLED", False)
     assert ui.bold("x") == "x"
     assert ui.dim("x") == "x"
-    assert ui.red("x") == "x"
+    assert ui.yellow("x") == "x"
 
 
 def test_enabled_wraps_and_resets(monkeypatch):
