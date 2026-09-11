@@ -18,7 +18,7 @@ def _salvage_tool_call(error_text):
     Returns (name, arguments_json_string) or None if unparseable.
     """
     try:
-        body = json.loads(error_text[error_text.index("{"):])
+        body = json.loads(error_text[error_text.index("{") :])
         failed = body["error"]["failed_generation"]
     except (ValueError, KeyError):
         return None
@@ -52,19 +52,24 @@ class LLMClient:
             except RuntimeError as e:
                 if "tool_use_failed" not in str(e):
                     raise
-                salvaged = _salvage_tool_call(str(e))
-                if salvaged:
+                if salvaged := _salvage_tool_call(str(e)):
                     name, arguments = salvaged
                     raw = {
-                        "choices": [{"message": {
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [{
-                                "id": f"salvaged_{attempt}",
-                                "type": "function",
-                                "function": {"name": name, "arguments": arguments},
-                            }],
-                        }}],
+                        "choices": [
+                            {
+                                "message": {
+                                    "role": "assistant",
+                                    "content": None,
+                                    "tool_calls": [
+                                        {
+                                            "id": f"salvaged_{attempt}",
+                                            "type": "function",
+                                            "function": {"name": name, "arguments": arguments},
+                                        }
+                                    ],
+                                }
+                            }
+                        ],
                         "usage": {},
                         "salvaged": True,
                     }
