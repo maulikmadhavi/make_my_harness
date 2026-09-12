@@ -1,12 +1,8 @@
-"""Interactive input: a pop-up file picker for @path mentions, and a
-pop-up dropdown for multiple-choice prompts (e.g. the permission gate).
+"""Interactive input: a pop-up @path file picker and a choice dropdown.
 
-Typing `@` (or `@par...`) opens a completion menu of files and folders
-under the cursor — Tab/arrows to select, like the fancy harnesses.
-Built on prompt_toolkit, the project's first real UI dependency: an
-interactive menu is not feasible with the stdlib alone (readline doesn't
-exist on Windows). When stdin/stdout isn't a terminal (piped input,
-tests, CI) both fall back to plain input() and behave exactly as before.
+Built on prompt_toolkit — the stdlib can't do interactive menus (no
+readline on Windows). Without a terminal (piped stdin, tests, CI) both
+fall back to plain input().
 """
 
 import re
@@ -55,8 +51,7 @@ class AtPathCompleter(Completer):
 def make_input():
     """Return a read(prompt_text) callable.
 
-    A real terminal gets a PromptSession with the @path picker; anything
-    else (piped stdin, tests) gets plain input(), same behavior as before.
+    A terminal gets the @path picker; anything else plain input().
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return input
@@ -69,8 +64,7 @@ def make_input():
 
 
 class ChoiceCompleter(Completer):
-    """Completes from a fixed (value, label) list, filtering on whatever
-    has been typed so far (case-insensitive prefix on value or label)."""
+    """Completes from a fixed (value, label) list on case-insensitive prefix."""
 
     def __init__(self, choices):
         self.choices = choices
@@ -83,8 +77,8 @@ class ChoiceCompleter(Completer):
 
 
 def _match_choice(raw, choices):
-    """Resolve typed text to a choice value: exact value/label match, or
-    an unambiguous value prefix. Returns None if nothing matched."""
+    """Resolve typed text to a choice value, else None: exact value/label
+    match, or an unambiguous value prefix."""
     raw = raw.strip().lower()
     if not raw:
         return None
@@ -98,11 +92,9 @@ def _match_choice(raw, choices):
 def make_chooser():
     """Return an ask(prompt_text, choices) -> value callable.
 
-    choices is a list of (value, label) pairs. In a real terminal this
-    opens a pop-up dropdown (arrow keys or typing to filter, Enter to
-    pick — the same picker mechanism as @path); otherwise it falls back
-    to a plain typed prompt, matched against each choice's value/label.
-    Re-prompts on anything that doesn't resolve to exactly one choice.
+    choices is a list of (value, label) pairs. A terminal gets a pop-up
+    dropdown, anything else a typed prompt. Re-prompts until the input
+    resolves to exactly one choice.
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
 
