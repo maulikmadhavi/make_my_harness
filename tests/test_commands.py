@@ -1,15 +1,10 @@
 """Tests for commands.run — the /clear slash command and the unknown-
 command fallback, both offline (a stub log, no LLM or terminal needed)."""
 
+import pytest
+from helpers import StubLog
+
 from make_harness import commands
-
-
-class StubLog:
-    def __init__(self):
-        self.events = []
-
-    def event(self, kind, **fields):
-        self.events.append((kind, fields))
 
 
 def _messages():
@@ -20,9 +15,17 @@ def _messages():
     ]
 
 
-def test_clear_keeps_only_the_system_message():
+@pytest.fixture
+def sandboxed_registry(monkeypatch):
+    """A copy of the command registry, so a test-only command can be
+    registered without leaking into the rest of the run."""
+    monkeypatch.setattr(commands, "_COMMANDS", dict(commands._COMMANDS))
+
+
+@pytest.mark.parametrize("line", ["/clear", "/clear please"], ids=["bare", "with-arguments"])
+def test_clear_keeps_only_the_system_message(line):
     messages = _messages()
-    new_messages, output = commands.run("/clear", messages, StubLog())
+    new_messages, output = commands.run(line, messages, StubLog())
     assert new_messages == [messages[0]]
     assert "cleared" in output.lower()
 
@@ -30,40 +33,23 @@ def test_clear_keeps_only_the_system_message():
 def test_clear_logs_a_command_event():
     log = StubLog()
     commands.run("/clear", _messages(), log)
-    assert log.events == [("command", {"name": "clear", "output": log.events[0][1]["output"]})]
-    assert "cleared" in log.events[0][1]["output"].lower()
+    kind, fields = log.events[0]
+    assert (kind, fields["name"]) == ("command", "clear")
+    assert "cleared" in fields["output"].lower()
 
 
-def test_clear_tolerates_trailing_arguments():
+@pytest.mark.parametrize("line", ["/nope", "/"], ids=["unknown-name", "bare-slash"])
+def test_unknown_command_is_inert(line):
     messages = _messages()
-    new_messages, _ = commands.run("/clear please", messages, StubLog())
-    assert new_messages == [messages[0]]
-
-
-def test_unknown_command_leaves_messages_untouched():
-    messages = _messages()
-    new_messages, output = commands.run("/nope", messages, StubLog())
-    assert new_messages is messages
-    assert "Unknown command: /nope" in output
-    assert "/clear" in output  # lists what's actually available
-
-
-def test_bare_slash_is_treated_as_unknown():
-    messages = _messages()
-    new_messages, output = commands.run("/", messages, StubLog())
-    assert new_messages is messages
-    assert output.startswith("Unknown command: /")
-
-
-def test_unknown_command_does_not_log():
     log = StubLog()
-    commands.run("/nope", _messages(), log)
-    assert log.events == []
+    new_messages, output = commands.run(line, messages, log)
+    assert new_messages is messages  # untouched
+    assert output.startswith(f"Unknown command: {line.split()[0]}")
+    assert "/clear" in output  # lists what's actually available
+    assert log.events == []  # nothing logged
 
 
-def test_a_new_command_registers_through_the_decorator(monkeypatch):
-    monkeypatch.setattr(commands, "_COMMANDS", dict(commands._COMMANDS))  # sandboxed registry
-
+def test_a_new_command_registers_through_the_decorator(sandboxed_registry):
     @commands.command
     def shout(messages):
         """Test-only command."""
@@ -76,9 +62,7 @@ def test_a_new_command_registers_through_the_decorator(monkeypatch):
     assert log.events == [("command", {"name": "shout", "output": "shouted"})]
 
 
-def test_unknown_command_lists_every_registered_command_sorted(monkeypatch):
-    monkeypatch.setattr(commands, "_COMMANDS", dict(commands._COMMANDS))
-
+def test_unknown_command_lists_every_registered_command_sorted(sandboxed_registry):
     def zebra(messages):
         return messages, "z"
 

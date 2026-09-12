@@ -4,7 +4,14 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from make_harness.log import RunLog
+
+
+@pytest.fixture
+def log(tmp_path):
+    return RunLog(log_dir=tmp_path)
 
 
 def test_creates_the_log_dir_and_a_timestamped_filename(tmp_path):
@@ -14,15 +21,13 @@ def test_creates_the_log_dir_and_a_timestamped_filename(tmp_path):
     assert log.path.name.endswith(f"_{log.run_id}.jsonl")
 
 
-def test_the_file_appears_on_the_first_event(tmp_path):
-    log = RunLog(log_dir=tmp_path)
+def test_the_file_appears_on_the_first_event(log):
     assert not log.path.exists()
     log.event("boot")
     assert log.path.exists()
 
 
-def test_each_event_is_one_json_line_with_the_common_fields(tmp_path):
-    log = RunLog(log_dir=tmp_path)
+def test_each_event_is_one_json_line_with_the_common_fields(log):
     log.event("first", step=0, tool="read_file")
     log.event("second", answer="done")
     lines = log.path.read_text(encoding="utf-8").splitlines()
@@ -35,15 +40,13 @@ def test_each_event_is_one_json_line_with_the_common_fields(tmp_path):
         assert isinstance(record["ts"], float)
 
 
-def test_non_json_values_are_coerced_with_str(tmp_path):
-    log = RunLog(log_dir=tmp_path)
+def test_non_json_values_are_coerced_with_str(log):
     log.event("mention", attachment=Path("a") / "b.py")
     record = json.loads(log.path.read_text(encoding="utf-8"))
     assert record["attachment"] == str(Path("a") / "b.py")
 
 
-def test_unicode_is_written_verbatim_not_escaped(tmp_path):
-    log = RunLog(log_dir=tmp_path)
+def test_unicode_is_written_verbatim_not_escaped(log):
     log.event("user_message", content="héllo — 世界")
     raw = log.path.read_text(encoding="utf-8")
     assert "héllo — 世界" in raw

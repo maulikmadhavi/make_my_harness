@@ -8,20 +8,19 @@ from make_harness.toolsets import memory
 from make_harness.toolsets.memory import _slug, memory_index, read_memory, save_memory
 
 
-def test_slug_basic():
-    assert _slug("Pixi and Shell Quirks") == "pixi-and-shell-quirks"
+@pytest.mark.parametrize(
+    "title,expected",
+    [
+        ("Pixi and Shell Quirks", "pixi-and-shell-quirks"),
+        ("GROQ_API key!! (2026)", "groq-api-key-2026"),
+        ("", "memory"),  # never empty
+        ("???", "memory"),
+    ],
+    ids=["basic", "special-characters", "empty", "all-punctuation"],
+)
+def test_slug(title, expected):
+    assert _slug(title) == expected
 
-
-def test_slug_collapses_special_characters():
-    assert _slug("GROQ_API key!! (2026)") == "groq-api-key-2026"
-
-
-def test_slug_never_empty():
-    assert _slug("") == "memory"
-    assert _slug("???") == "memory"
-
-
-# --- save/read round trip against a temp memory/ directory -----------------
 
 @pytest.fixture
 def memory_dir(tmp_path, monkeypatch):
@@ -42,11 +41,10 @@ def test_save_writes_the_file_and_an_index_line(memory_dir):
     assert memory_index() == "- [Favorite Editor](favorite-editor.md) — VS Code\n"
 
 
-def test_read_resolves_the_name_through_the_same_slug(memory_dir):
+@pytest.mark.parametrize("name", ["Favorite Editor", "favorite editor", "favorite-editor"])
+def test_read_resolves_the_name_through_the_same_slug(memory_dir, name):
     save_memory("Favorite Editor", "VS Code")
-    assert read_memory("Favorite Editor") == "VS Code"
-    assert read_memory("favorite editor") == "VS Code"
-    assert read_memory("favorite-editor") == "VS Code"
+    assert read_memory(name) == "VS Code"
 
 
 def test_resave_updates_content_without_duplicating_the_index_line(memory_dir):

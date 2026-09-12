@@ -1,10 +1,14 @@
 """Tests for tools.Registry — schema generation and the execute error
 path (tool errors must come back as text results, never crash the loop)."""
 
+import pytest
+
 from make_harness.tools import Registry
 
 
-def _make_registry():
+@pytest.fixture
+def reg():
+    """A registry holding one working tool and one that always raises."""
     reg = Registry()
 
     @reg.tool
@@ -20,28 +24,35 @@ def _make_registry():
     return reg
 
 
-def test_execute_success():
-    reg = _make_registry()
-    assert reg.execute("greet", {"name": "Maulik"}) == "Hello Maulik"
+@pytest.mark.parametrize(
+    "name,args,expected",
+    [
+        ("greet", {"name": "Maulik"}, "Hello Maulik"),
+        ("nope", {}, "Error: unknown tool 'nope'"),
+        ("boom", {}, "Error in boom: ValueError: kaboom"),
+    ],
+    ids=["success", "unknown-tool", "tool-raises"],
+)
+def test_execute(reg, name, args, expected):
+    assert reg.execute(name, args) == expected
 
 
-def test_execute_unknown_tool():
-    reg = _make_registry()
-    assert reg.execute("nope", {}) == "Error: unknown tool 'nope'"
-
-
-def test_execute_tool_exception_becomes_error_string():
-    reg = _make_registry()
-    assert reg.execute("boom", {}) == "Error in boom: ValueError: kaboom"
-
-
-def test_execute_wrong_arguments_do_not_crash():
-    reg = _make_registry()
+def test_execute_wrong_arguments_do_not_crash(reg):
     assert reg.execute("greet", {"wrong_arg": 1}).startswith("Error in greet: TypeError")
 
 
-def test_schema_from_signature_and_docstring():
-    reg = _make_registry()
+def test_execute_result_is_always_a_string():
+    reg = Registry()
+
+    @reg.tool
+    def number() -> int:
+        """Returns an int."""
+        return 42
+
+    assert reg.execute("number", {}) == "42"
+
+
+def test_schema_from_signature_and_docstring(reg):
     schema = reg.schemas()[0]["function"]
     assert schema["name"] == "greet"
     assert schema["description"] == "Say hello."
@@ -52,7 +63,11 @@ def test_schema_from_signature_and_docstring():
     assert schema["parameters"]["required"] == ["name"]
 
 
-def test_numeric_and_unannotated_parameters_map_to_json_types():
+def test_schemas_preserve_registration_order(reg):
+    assert [s["function"]["name"] for s in reg.schemas()] == ["greet", "boom"]
+
+
+def test_annotations_map_to_json_types_and_defaults_drop_out_of_required():
     reg = Registry()
 
     @reg.tool
@@ -91,19 +106,3 @@ def test_decorator_returns_the_original_function():
 
     assert reg.tool(raw) is raw
     assert raw("a") == "A"
-
-
-def test_schemas_preserve_registration_order():
-    reg = _make_registry()
-    assert [s["function"]["name"] for s in reg.schemas()] == ["greet", "boom"]
-
-
-def test_execute_result_is_always_a_string():
-    reg = Registry()
-
-    @reg.tool
-    def number() -> int:
-        """Returns an int."""
-        return 42
-
-    assert reg.execute("number", {}) == "42"

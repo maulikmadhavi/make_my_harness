@@ -1,13 +1,17 @@
-"""Tests for prompt.AtPathCompleter (the @path picker) and ChoiceCompleter
-/_match_choice/make_chooser (the yes/no/always/deny dropdown), all driven
-offline via prompt_toolkit Documents or a stubbed input() — no terminal
-needed."""
+"""Tests for the terminal I/O layer: ui's ANSI helpers, prompt's @path
+picker (AtPathCompleter) and the choice dropdown (ChoiceCompleter,
+_match_choice, make_chooser).
+
+All offline — completers are driven with prompt_toolkit Documents and
+the chooser with a stubbed input(), so no terminal is needed.
+"""
 
 import os
 
 import pytest
 from prompt_toolkit.document import Document
 
+from make_harness import ui
 from make_harness.prompt import (
     AtPathCompleter,
     ChoiceCompleter,
@@ -17,11 +21,28 @@ from make_harness.prompt import (
 )
 
 
-def _completions(text):
-    return [c.text for c in AtPathCompleter().get_completions(Document(text), None)]
+class TestAnsiHelpers:
+    def test_disabled_passes_text_through(self, monkeypatch):
+        monkeypatch.setattr(ui, "ENABLED", False)
+        assert (ui.bold("x"), ui.dim("x"), ui.yellow("x")) == ("x", "x", "x")
+
+    def test_enabled_wraps_and_resets(self, monkeypatch):
+        monkeypatch.setattr(ui, "ENABLED", True)
+        assert ui.cyan("hello") == "\033[36mhello\033[0m"
+        assert ui.bold("hi").endswith("\033[0m")
+
+    def test_pytest_capture_counts_as_non_tty(self):
+        # Under pytest's captured stdout ENABLED must have come out False, so
+        # every loop/policy print in the other tests stayed plain text, and
+        # make_input must hand back the builtin rather than a PromptSession.
+        assert ui.ENABLED is False
+        assert make_input() is input
 
 
-def _setup_tree(tmp_path, monkeypatch):
+@pytest.fixture
+def tree(tmp_path, monkeypatch):
+    """A temp cwd holding a folder, two files, and two entries the
+    completer must skip."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "readme.md").write_text("r", encoding="utf-8")
@@ -29,54 +50,43 @@ def _setup_tree(tmp_path, monkeypatch):
     (tmp_path / "app.py").write_text("a", encoding="utf-8")
     (tmp_path / ".hidden").write_text("h", encoding="utf-8")
     (tmp_path / "__pycache__").mkdir()
+    return tmp_path
 
 
-def test_plain_text_gets_no_completions(tmp_path, monkeypatch):
-    _setup_tree(tmp_path, monkeypatch)
-    assert _completions("explain the code") == []
-    assert _completions("a sentence ending in d") == []
+def _completions(text):
+    return [c.text for c in AtPathCompleter().get_completions(Document(text), None)]
 
 
-def test_bare_at_lists_folders_first_then_files(tmp_path, monkeypatch):
-    _setup_tree(tmp_path, monkeypatch)
-    assert _completions("look at @") == ["docs/", "app.py", "data.py"]
+class TestAtPathCompleter:
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("explain the code", []),
+            ("a sentence ending in d", []),
+            ("look at @", ["docs/", "app.py", "data.py"]),  # folders first, then alphabetical
+            ("@D", ["docs/", "data.py"]),  # case-insensitive prefix
+            ("@app", ["app.py"]),
+            ("read @docs/r", ["docs/readme.md"]),
+            ("@nowhere/", []),  # missing folder
+        ],
+        ids=["plain-text", "trailing-word", "bare-at", "case-insensitive",
+             "file-prefix", "nested-segment", "missing-folder"],
+    )
+    def test_completions(self, tree, text, expected):
+        assert _completions(text) == expected
 
+    def test_hidden_and_noise_entries_are_skipped(self, tree):
+        everything = _completions("@")
+        assert ".hidden" not in everything
+        assert "__pycache__/" not in everything
 
-def test_prefix_filters_case_insensitively(tmp_path, monkeypatch):
-    _setup_tree(tmp_path, monkeypatch)
-    assert _completions("@D") == ["docs/", "data.py"]
-    assert _completions("@app") == ["app.py"]
+    def test_replaces_the_whole_token(self, tree):
+        completion = next(iter(AtPathCompleter().get_completions(Document("see @docs/r"), None)))
+        assert completion.start_position == -len("docs/r")
 
-
-def test_nested_segment_completion(tmp_path, monkeypatch):
-    _setup_tree(tmp_path, monkeypatch)
-    assert _completions("read @docs/r") == ["docs/readme.md"]
-
-
-def test_hidden_and_noise_entries_are_skipped(tmp_path, monkeypatch):
-    _setup_tree(tmp_path, monkeypatch)
-    everything = _completions("@")
-    assert ".hidden" not in everything
-    assert "__pycache__/" not in everything
-
-
-def test_replaces_the_whole_token(tmp_path, monkeypatch):
-    _setup_tree(tmp_path, monkeypatch)
-    doc = Document("see @docs/r")
-    completion = next(iter(AtPathCompleter().get_completions(doc, None)))
-    assert completion.start_position == -len("docs/r")
-
-
-@pytest.mark.skipif(os.name != "nt", reason="backslash separators are Windows-style")
-def test_backslash_separator(tmp_path, monkeypatch):
-    _setup_tree(tmp_path, monkeypatch)
-    assert _completions("read @docs\\r") == ["docs\\readme.md"]
-
-
-def test_non_tty_falls_back_to_plain_input():
-    # Under pytest stdin/stdout are captured, so make_input must return the
-    # builtin — the piped-REPL regression test covers this end to end.
-    assert make_input() is input
+    @pytest.mark.skipif(os.name != "nt", reason="backslash separators are Windows-style")
+    def test_backslash_separator(self, tree):
+        assert _completions("read @docs\\r") == ["docs\\readme.md"]
 
 
 _YNAD = [
@@ -87,65 +97,51 @@ _YNAD = [
 ]
 
 
-def test_choice_completer_lists_everything_when_untyped():
-    values = [c.text for c in ChoiceCompleter(_YNAD).get_completions(Document(""), None)]
-    assert values == ["yes", "no", "always", "deny"]
+class TestChoiceCompleter:
+    @pytest.mark.parametrize(
+        "typed,expected",
+        [
+            ("", ["yes", "no", "always", "deny"]),
+            ("al", ["always"]),  # value prefix
+            ("Deny", ["deny"]),  # label prefix, case-insensitive
+        ],
+        ids=["untyped-lists-all", "value-prefix", "label-prefix"],
+    )
+    def test_filtering(self, typed, expected):
+        assert [c.text for c in ChoiceCompleter(_YNAD).get_completions(Document(typed), None)] == expected
+
+    def test_replaces_everything_typed(self):
+        completions = list(ChoiceCompleter(_YNAD).get_completions(Document("  alw"), None))
+        assert [c.text for c in completions] == ["always"]
+        assert completions[0].start_position == -len("  alw")
 
 
-def test_choice_completer_filters_by_value_prefix():
-    values = [c.text for c in ChoiceCompleter(_YNAD).get_completions(Document("al"), None)]
-    assert values == ["always"]
+class TestMatchChoice:
+    @pytest.mark.parametrize(
+        "raw,choices,expected",
+        [
+            ("yes", [("yes", "Y"), ("no", "N")], "yes"),
+            ("ALWAYS ALLOW", [("always", "Always Allow"), ("no", "No")], "always"),
+            ("al", [("yes", "Y"), ("always", "Always")], "always"),
+            ("de", [("deny", "Deny"), ("delete", "Delete")], None),
+            ("maybe", [("yes", "Y"), ("no", "N")], None),
+            ("", [("yes", "Y")], None),
+        ],
+        ids=["exact-value", "case-insensitive-label", "unambiguous-prefix",
+             "ambiguous-prefix", "no-match", "empty"],
+    )
+    def test_match(self, raw, choices, expected):
+        assert _match_choice(raw, choices) == expected
 
 
-def test_choice_completer_filters_by_label_prefix():
-    values = [c.text for c in ChoiceCompleter(_YNAD).get_completions(Document("Deny"), None)]
-    assert values == ["deny"]
+class TestChooserFallback:
+    """Off-terminal make_chooser() falls back to a typed prompt."""
 
+    def test_matches_a_typed_value(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda prompt: "always")
+        assert make_chooser()("allow? ", _YNAD) == "always"
 
-def test_match_choice_exact_value():
-    assert _match_choice("yes", [("yes", "Y"), ("no", "N")]) == "yes"
-
-
-def test_match_choice_case_insensitive_label():
-    choices = [("always", "Always Allow"), ("no", "No")]
-    assert _match_choice("ALWAYS ALLOW", choices) == "always"
-
-
-def test_match_choice_unambiguous_prefix():
-    assert _match_choice("al", [("yes", "Y"), ("always", "Always")]) == "always"
-
-
-def test_match_choice_ambiguous_prefix_returns_none():
-    assert _match_choice("de", [("deny", "Deny"), ("delete", "Delete")]) is None
-
-
-def test_match_choice_no_match_returns_none():
-    assert _match_choice("maybe", [("yes", "Y"), ("no", "N")]) is None
-
-
-def test_match_choice_empty_returns_none():
-    assert _match_choice("", [("yes", "Y")]) is None
-
-
-def test_chooser_non_tty_matches_typed_value(monkeypatch):
-    monkeypatch.setattr("builtins.input", lambda prompt: "always")
-    ask = make_chooser()
-    assert ask("allow? ", _YNAD) == "always"
-
-
-def test_chooser_non_tty_reprompts_until_matched(monkeypatch):
-    responses = iter(["banana", "y"])
-    monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
-    ask = make_chooser()
-    assert ask("allow? ", _YNAD) == "yes"
-
-
-def test_at_path_into_a_missing_folder_gives_no_completions(tmp_path, monkeypatch):
-    _setup_tree(tmp_path, monkeypatch)
-    assert _completions("@nowhere/") == []
-
-
-def test_choice_completer_replaces_everything_typed():
-    completions = list(ChoiceCompleter(_YNAD).get_completions(Document("  alw"), None))
-    assert [c.text for c in completions] == ["always"]
-    assert completions[0].start_position == -len("  alw")
+    def test_reprompts_until_matched(self, monkeypatch):
+        responses = iter(["banana", "y"])
+        monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
+        assert make_chooser()("allow? ", _YNAD) == "yes"

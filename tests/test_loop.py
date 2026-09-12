@@ -5,6 +5,9 @@ delivered as the tool result itself so every tool_call id still gets a
 role:"tool" response (the pairing rule the deny path also honors).
 """
 
+import pytest
+from helpers import StubLog
+
 from make_harness.loop import DENIED_RESULT, SHORT_CIRCUIT_RESULT, _repair_args, run_turn
 from make_harness.tools import Registry
 
@@ -38,14 +41,6 @@ class AllowAll:
 class DenyAll:
     def check(self, name, args):
         return "deny"
-
-
-class StubLog:
-    def __init__(self):
-        self.events = []
-
-    def event(self, kind, **fields):
-        self.events.append((kind, fields))
 
 
 def _tc(call_id, name, arguments):
@@ -148,18 +143,19 @@ def test_argument_key_order_does_not_defeat_the_check():
     assert calls == [("1", "2")]
 
 
-def test_repair_extracts_object_from_prose():
-    assert _repair_args('Sure! Here are the arguments: {"path": "x.py"}') == {"path": "x.py"}
-
-
-def test_repair_extracts_object_from_tags():
-    assert _repair_args('<args>{"path": "x.py"}</args>') == {"path": "x.py"}
-
-
-def test_repair_gives_up_on_garbage():
-    assert _repair_args("no braces here") is None
-    assert _repair_args("{still: not json}") is None
-    assert _repair_args("}{") is None
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ('Sure! Here are the arguments: {"path": "x.py"}', {"path": "x.py"}),
+        ('<args>{"path": "x.py"}</args>', {"path": "x.py"}),
+        ("no braces here", None),
+        ("{still: not json}", None),
+        ("}{", None),
+    ],
+    ids=["prose-wrapped", "tag-wrapped", "no-braces", "not-json", "reversed-braces"],
+)
+def test_repair_args(raw, expected):
+    assert _repair_args(raw) == expected
 
 
 def test_prose_wrapped_arguments_are_repaired_and_executed():
@@ -173,7 +169,7 @@ def test_prose_wrapped_arguments_are_repaired_and_executed():
     answer = run_turn(llm, reg, AllowAll(), log, messages)
     assert answer == "done"
     assert calls == ["x.py"]
-    assert any(kind == "args_repaired" for kind, _ in log.events)
+    assert "args_repaired" in log.kinds()
 
 
 def test_unrepairable_arguments_fail_clean():
@@ -308,7 +304,7 @@ def test_log_trail_for_one_tool_round_trip():
     reg, _ = _make_registry()
     log = StubLog()
     run_turn(llm, reg, AllowAll(), log, [{"role": "user", "content": "go"}])
-    assert [kind for kind, _ in log.events] == [
+    assert log.kinds() == [
         "llm_request", "llm_response", "tool_call", "permission", "tool_result",
         "llm_request", "llm_response", "done",
     ]

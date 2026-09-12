@@ -7,6 +7,8 @@ safety, and the step-3 last resort that fixed the live no-op bug.
 
 import json
 
+from helpers import StubLog
+
 from make_harness.context import SUMMARY_PROMPT, _safe_cut, compact, estimate_tokens
 
 
@@ -20,14 +22,6 @@ class StubLLM:
             "usage": {},
             "raw": {},
         }
-
-
-class StubLog:
-    def __init__(self):
-        self.events = []
-
-    def event(self, kind, **fields):
-        self.events.append((kind, fields))
 
 
 def _msg(role, content, **extra):
@@ -81,7 +75,7 @@ def test_step1_stubs_old_tool_results():
     out = compact(msgs, StubLLM(), log, budget=budget)
     assert out[2]["content"].endswith("…[stubbed by compaction]")
     assert len(out[2]["content"]) < 300
-    assert [kind for kind, _ in log.events] == ["compaction"]
+    assert log.kinds() == ["compaction"]
     assert log.events[0][1]["mode"] == "stub-old-tools"
     assert estimate_tokens(out) <= budget
     assert _pairing_ok(out)
