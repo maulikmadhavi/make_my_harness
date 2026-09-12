@@ -8,6 +8,20 @@ import pytest
 
 from make_harness.llm import LLMClient
 
+ENV_KEYS = ("LLM_ENDPOINT", "LLM_MODEL", "LLM_API_KEY", "GROQ_API_KEY")
+
+
+@pytest.fixture(autouse=True)
+def stub_backend(monkeypatch):
+    """Name a backend for get_llm_client(), which LLMClient() calls in
+    __init__ and which raises when the environment configures none. Every
+    test below replaces .chat afterwards, so the endpoint has to exist,
+    not work. Without this the file passes only on a machine that happens
+    to have real credentials exported."""
+    for key in ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("LLM_ENDPOINT", "http://stub/v1")
+
 
 def _client_with_stub_response(raw):
     client = LLMClient(model="stub-model")
