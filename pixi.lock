@@ -454,7 +454,7 @@ packages:
 - pypi: ./
   name: make-harness
   version: 0.1.0
-  sha256: 0e02a1cfacf8d45936b6b098d44fa6e9aebbc80deaf0b1ce275461fdcd38789e
+  sha256: b39748de17ad3f8847faaa6f0b586006dd437bf68bae59cebe87abfa884a0979
   requires_dist:
   - requests>=2.34.2,<3
   - prompt-toolkit>=3.0,<4
