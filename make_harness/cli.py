@@ -122,7 +122,8 @@ def repl():
     console.print("[dim]Shortcuts:[/dim]")
     console.print("  [cyan]@path[/cyan]     Attach files/folders")
     console.print("  [cyan]/clear[/cyan]    Reset conversation (memory kept)")
-    console.print("  [cyan]exit[/cyan]      Quit")
+    console.print("  [cyan]/compact[/cyan]  Summarize history to free context")
+    console.print("  [cyan]/exit[/cyan]     Quit (exit and quit work too)")
     console.print()
     read_input = make_input()
 
@@ -138,8 +139,11 @@ def repl():
         if user.lower() in ("exit", "quit"):
             break
         if user.startswith("/"):
-            messages, output = commands.run(user, messages, log)
+            new_messages, output = commands.run(user, messages, log, llm)
             console.print(f"[dim]{escape(output)}[/dim]")
+            if new_messages is None:
+                break
+            messages = new_messages
             continue
 
         expanded, attached = expand_mentions(user)

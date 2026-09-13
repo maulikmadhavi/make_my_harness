@@ -165,7 +165,8 @@ tools: read_file, write_file, run_command, load_skill, web_search, http_request,
 Shortcuts:
   @path     Attach files/folders
   /clear    Reset conversation (memory kept)
-  exit      Quit
+  /compact  Summarize history to free context
+  /exit     Quit (exit and quit work too)
 
 you >
 ```
@@ -197,9 +198,15 @@ you >
   retry variants of the rejected call. Ctrl+C at the prompt counts as a
   denial.
 - **`/clear`** resets the conversation to just the system prompt — the
-  memory and skills indexes folded into it survive. An unknown `/command`
-  prints the list of available commands instead of going to the model.
-- **`exit`**, **`quit`**, Ctrl+C or Ctrl+D ends the session.
+  memory and skills indexes folded into it survive.
+- **`/compact`** runs compaction now instead of waiting for
+  `HARNESS_TOKEN_BUDGET` — every step described in
+  [How a turn works](#how-a-turn-works) — and prints the estimated size
+  before and after. If the summary call fails, or the result would be no
+  smaller, the conversation is left as it was.
+- An unknown `/command` prints the list of available commands instead of
+  going to the model.
+- **`/exit`**, **`exit`**, **`quit`**, Ctrl+C or Ctrl+D ends the session.
 - Colors switch off automatically when output is piped, or with
   `NO_COLOR=1`.
 
@@ -269,13 +276,14 @@ required. New tools are gated by default; add the name to
 
 ```python
 @command
-def tokens(messages):
+def tokens(messages, llm, log):
     """Show the estimated context size."""
     from make_harness.context import estimate_tokens
     return messages, f"~{estimate_tokens(messages)} tokens"
 ```
 
-A command receives the message list and returns `(new_messages, output)`.
+A command receives the message list, the LLM client and the run log, and
+returns `(new_messages, output)`; `None` for `new_messages` ends the session.
 
 **Swap or add a backend** — subclass `OpenAICompatibleModel` in
 `make_harness/llm_providers.py` (as `GroqChatModel` does) and branch on it
@@ -383,7 +391,7 @@ LLM path, run these in a live session:
 ```
 make_harness/
   cli.py             argparse entry point, .env loader, the REPL
-  commands.py        /clear and other slash commands (registry, not sent to the LLM)
+  commands.py        /clear, /compact, /exit and other slash commands (registry, not sent to the LLM)
   prompt.py          @ pop-up file picker + permission dropdown (prompt_toolkit)
   mentions.py        @path mention expansion (file/folder attachments)
   ui.py              ANSI styling helpers (stdlib, NO_COLOR-aware)

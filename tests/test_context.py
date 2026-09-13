@@ -7,21 +7,9 @@ safety, and the step-3 last resort that fixed the live no-op bug.
 
 import json
 
-from helpers import StubLog
+from helpers import StubLLM, StubLog
 
 from make_harness.context import SUMMARY_PROMPT, _safe_cut, compact, estimate_tokens
-
-
-class StubLLM:
-    """Stands in for LLMClient during the summarize step — no network."""
-
-    def complete(self, messages, tools=None):
-        return {
-            "content": "SUMMARY OF OLDER CONVERSATION",
-            "tool_calls": [],
-            "usage": {},
-            "raw": {},
-        }
 
 
 def _msg(role, content, **extra):

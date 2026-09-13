@@ -159,3 +159,15 @@ class TestEntryPoint:
         assert proc.returncode == 0
         assert "make-harness" in out  # banner printed
         assert "error:" not in out  # exited before any LLM round-trip
+
+    def test_piped_slash_exit_stops_before_later_input(self, tmp_path):
+        # End of input would stop the REPL on its own, so a bare "/exit"
+        # could not show it worked; the "hello" after it would reach the
+        # unreachable endpoint and print "error:" if the session carried on.
+        proc = _run_cli(
+            cwd=tmp_path, stdin=b"/exit\nhello\n", LLM_ENDPOINT="http://127.0.0.1:9/v1",
+        )
+        out = proc.stdout.decode("utf-8", errors="replace")
+        assert proc.returncode == 0
+        assert "Goodbye." in out
+        assert "error:" not in out

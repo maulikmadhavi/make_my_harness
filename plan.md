@@ -345,6 +345,38 @@ pluggably *if and when* the first slash command is added, not before" —
   whether it remembered the math question, got `No` (not just hidden,
   actually gone); confirmed exactly one `command` event with
   `name: clear` in the session's JSONL log.
+- Update 2026-09-14 — `/compact`, user-requested after a live session
+  overflowed an 8192-token local model (qwen3-4b in LM Studio): compaction
+  only fired past `HARNESS_TOKEN_BUDGET` (default 60000), with no way to
+  trigger it by hand. Commands now take `(messages, llm, log)` — `run()`
+  gains an `llm` argument that `cli.py` passes — since summarizing needs
+  the model. `/compact` runs `context.compact` on a deep copy with
+  `budget=1`, so every step applies, and returns the original list when
+  the summary call raises (commands run outside the REPL's turn `try`) or
+  the result is no smaller (a verbose summary of a short history can
+  outgrow it). Unchanged caveat: compaction still runs only between user
+  turns, never between tool calls inside one.
+- Verified: 4 new offline tests (197 total) — compaction regardless of
+  budget, a failed summary leaves history untouched, a short history makes
+  no LLM call, an oversized summary keeps the original; `StubLLM` moved to
+  `tests/helpers.py` for reuse. Live smoke (piped CLI, qwen3-4b): read
+  `pixi.toml`, three short turns, `/compact` → `Compacted: ~1087 -> ~940
+  tokens.` with one `compaction` event (`mode: summarize`) and one
+  `command` event; a follow-up still recalled the file's first line from
+  the summary. The no-smaller guard was added after that run and is
+  covered by the unit tests only.
+- Update 2026-09-14 — `/exit`, user-requested. Registered in the command
+  registry rather than as another `exit`/`quit` string check in `cli.py`,
+  so the unknown-command message lists it and it is logged as a `command`
+  event. A command returning `None` in place of the message list tells
+  the REPL to stop; bare `exit`/`quit` keep working unchanged.
+- Verified: 3 new offline tests (200 total) — `/exit` and `/exit now`
+  return `None` with one `command` event, and a subprocess test pipes
+  `/exit` then `hello` against an unreachable endpoint: it exits 0 with
+  `Goodbye.` and no `error:`. The trailing `hello` is what makes it
+  discriminating — end of input stops the REPL anyway, while piping
+  `/clear` then `hello` the same way does print `error:` (checked by hand,
+  ~2 s).
 
 ### [x] Stage 14 — `llm.py` returns the model's `reasoning`
 User-requested 2026-07-20, first piece of a 10-stage full-screen TUI

@@ -12,8 +12,9 @@ that either the CLI or the loop calls into.
 flowchart TD
     entry["main.py · __main__.py"] --> cli["cli.py<br/>.env loader · REPL"]
     cli --> mentions["mentions.py<br/>@path attachments"]
-    cli --> commands["commands.py<br/>/clear"]
+    cli --> commands["commands.py<br/>/clear · /compact · /exit"]
     cli --> context["context.py<br/>token budget · compaction"]
+    commands --> context
     cli --> loop["loop.py<br/>run_turn"]
     context --> llm
     loop --> llm["llm.py<br/>adapter · salvage · retry"]
@@ -44,9 +45,9 @@ it readable.
 | `toolsets/` | `read_file`, `write_file`, `run_command`, `web_search`, `http_request`, `save_memory`, `read_memory`, `load_skill` | the model, through the registry |
 | `policy.py` | Auto-allows read-only tools; asks yes / no / always / deny for the rest through its `_ask` seam | `loop.py` |
 | `prompt.py` | The `@path` completer and the choice dropdown; both fall back to plain `input()` off a TTY | `cli.py`, `policy.py` |
-| `context.py` | `compact`: stub old tool results, summarize the middle, stub recent results, in that order | `cli.py` |
+| `context.py` | `compact`: stub old tool results, summarize the middle, stub recent results, in that order | `cli.py`, `commands.py` |
 | `mentions.py` | Expands `@path` into attachment blocks, capped head plus tail | `cli.py` |
-| `commands.py` | Slash-command registry; ships `/clear` | `cli.py` |
+| `commands.py` | Slash-command registry; ships `/clear`, `/compact` and `/exit` | `cli.py` |
 | `log.py` | `RunLog.event`: one JSONL line per event, one file per session | `cli.py`, `loop.py`, `context.py`, `commands.py` |
 | `ui.py` | `bold`, `dim`, `yellow`, `cyan`; pass-through off a TTY or with `NO_COLOR` | `cli.py`, `loop.py`, `policy.py` |
 
