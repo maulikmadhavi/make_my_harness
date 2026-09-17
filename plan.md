@@ -602,7 +602,31 @@ Stages 20–23 were the full-screen TUI, since removed, so Part 2 starts at 24.
   `.env`, startup printed the rename hint for `LLM_ENDPOINT`,
   `LLM_MODEL` and `GROQ_API_KEY`.
 
-### [ ] Stage 25 — `.agents/` layout: skills directories and input history
+### [x] Stage 25 — `.agents/` layout: skills directories and input history
+- `toolsets/skills.py` searches `./.agents/skills` then
+  `~/.agents/skills` (was `./skills` only); the project copy wins a name
+  clash, being the more specific one. The bundled `commit-messages`
+  skill moved to `.agents/skills/`.
+- Frontmatter is parsed with PyYAML (new dependency), so folded and
+  quoted descriptions work; a multi-line value is joined onto one line
+  for the index. A header YAML rejects — typically an unquoted
+  description containing `: ` — falls back to the old line-by-line
+  `key: value` parse rather than hiding the skill.
+- `prompt.py`: the terminal input keeps its history in
+  `~/.agents/history` (prompt_toolkit `FileHistory`), so the up arrow
+  reaches earlier sessions. Piped input is unchanged.
+- Tool names stay as they are (`load_skill`, `run_command`): neuralcode's
+  `read_skill` / `bash` are only different spellings, and on Windows the
+  shell isn't bash.
+- Not moved: the untracked `skills/vade-*` folders in the developer's
+  working tree. They stop being discovered until moved to
+  `.agents/skills/`.
+- Verified: 211 tests pass (5 new: a folded YAML description, quoted
+  values, home-directory discovery, the project winning a clash, and the
+  history file location). From the repo root, `skills_index()` lists
+  `commit-messages` from its new path.
+
+### [ ] Stage 26 — `str_replace` edit tool
 ### [ ] Stage 26 — `str_replace` edit tool
 ### [ ] Stage 27 — Context management: cap/spill, strip, fit, usage-triggered compaction
 ### [ ] Stage 28 — Per-turn `<env>` block: time, git branch, changed files

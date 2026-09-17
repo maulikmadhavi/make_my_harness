@@ -2,7 +2,8 @@
 
 Built on prompt_toolkit — the stdlib can't do interactive menus (no
 readline on Windows). Without a terminal (piped stdin, tests, CI) both
-fall back to plain input().
+fall back to plain input(). What you type is kept in ~/.agents/history,
+so the up arrow reaches messages from earlier sessions.
 """
 
 import re
@@ -12,10 +13,15 @@ from pathlib import Path
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.history import FileHistory
 
 # Same token shape as mentions.py's _MENTION, anchored to the cursor.
 _AT_TOKEN = re.compile(r"@([\w./\\:~-]*)$")
 _SKIP = {"__pycache__", "node_modules", ".git"}
+
+
+def history_path():
+    return Path.home() / ".agents" / "history"
 
 
 class AtPathCompleter(Completer):
@@ -51,11 +57,18 @@ class AtPathCompleter(Completer):
 def make_input():
     """Return a read(prompt_text) callable.
 
-    A terminal gets the @path picker; anything else plain input().
+    A terminal gets the @path picker and the input history; anything else
+    plain input().
     """
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return input
-    session = PromptSession(completer=AtPathCompleter(), complete_while_typing=True)
+    history = history_path()
+    history.parent.mkdir(parents=True, exist_ok=True)
+    session = PromptSession(
+        completer=AtPathCompleter(),
+        complete_while_typing=True,
+        history=FileHistory(str(history)),
+    )
 
     def read(prompt_text):
         return session.prompt(ANSI(prompt_text))

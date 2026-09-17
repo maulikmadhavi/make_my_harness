@@ -11,7 +11,7 @@ import os
 import pytest
 from prompt_toolkit.document import Document
 
-from make_harness import ui
+from make_harness import prompt, ui
 from make_harness.prompt import (
     AtPathCompleter,
     ChoiceCompleter,
@@ -37,6 +37,18 @@ class TestAnsiHelpers:
         # make_input must hand back the builtin rather than a PromptSession.
         assert ui.ENABLED is False
         assert make_input() is input
+
+
+def test_terminal_input_keeps_history_under_home_agents(tmp_path, monkeypatch):
+    # A real PromptSession needs a console, so record its arguments instead.
+    captured = {}
+    monkeypatch.setattr(prompt.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(prompt.sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(prompt, "PromptSession", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr(prompt, "history_path", lambda: tmp_path / ".agents" / "history")
+    make_input()
+    assert captured["history"].filename == str(tmp_path / ".agents" / "history")
+    assert (tmp_path / ".agents").is_dir()  # created so the first save succeeds
 
 
 @pytest.fixture

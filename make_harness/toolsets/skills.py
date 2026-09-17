@@ -1,20 +1,46 @@
-"""Skill packages: skills/<name>/SKILL.md, discovered at REPL startup.
+"""Skill packages: <dir>/<name>/SKILL.md, discovered at REPL startup.
 
-A skill is a markdown file with two frontmatter fields (name,
-description) and a body of instructions — the same shape Claude Code
-itself uses. Like memory (Stage 4), only the index (name + description)
-is injected into the system prompt at startup — progressive disclosure —
-so an unused skill costs a couple of index lines, not its whole body;
-load_skill fetches the full instructions on demand.
+Two directories are searched, and the project wins a name clash:
+  ./.agents/skills     skills that ship with the project
+  ~/.agents/skills     your own, available in every project
+
+A skill is a markdown file with YAML frontmatter (name, description) and a
+body of instructions — the same shape Claude Code itself uses. Like memory
+(Stage 4), only the index (name + description) is injected into the system
+prompt at startup — progressive disclosure — so an unused skill costs a
+couple of index lines, not its whole body; load_skill fetches the full
+instructions on demand.
 """
 
 import re
 from pathlib import Path
 
+import yaml
+
 from make_harness.tools import tool
 
-SKILLS_DIR = Path("skills")
 _FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n(.*)\Z", re.DOTALL)
+
+
+def skill_dirs():
+    return [Path(".agents") / "skills", Path.home() / ".agents" / "skills"]
+
+
+def _frontmatter(header):
+    """Parse the header as YAML; fall back to one `key: value` per line for
+    headers YAML rejects, like an unquoted description containing ': '."""
+    try:
+        meta = yaml.safe_load(header)
+    except yaml.YAMLError:
+        meta = None
+    if isinstance(meta, dict):
+        return {key: " ".join(str(value).split()) for key, value in meta.items() if value is not None}
+    meta = {}
+    for line in header.splitlines():
+        key, sep, value = line.partition(":")
+        if sep:
+            meta[key.strip()] = value.strip()
+    return meta
 
 
 def _parse(path):
@@ -24,25 +50,20 @@ def _parse(path):
     if not m:
         return None
     header, body = m.groups()
-    meta = {}
-    for line in header.splitlines():
-        key, sep, value = line.partition(":")
-        if sep:
-            meta[key.strip()] = value.strip()
+    meta = _frontmatter(header)
     name = meta.get("name") or path.parent.name
     return name, meta.get("description", ""), body.strip()
 
 
 def discover():
-    """Return {name: (description, body)} for every skills/*/SKILL.md."""
-    if not SKILLS_DIR.is_dir():
-        return {}
+    """Return {name: (description, body)} for every SKILL.md found."""
     skills = {}
-    for skill_md in sorted(SKILLS_DIR.glob("*/SKILL.md")):
-        parsed = _parse(skill_md)
-        if parsed:
-            name, description, body = parsed
-            skills[name] = (description, body)
+    for directory in skill_dirs():
+        for skill_md in sorted(directory.glob("*/SKILL.md")):
+            parsed = _parse(skill_md)
+            if parsed:
+                name, description, body = parsed
+                skills.setdefault(name, (description, body))
     return skills
 
 

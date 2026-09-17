@@ -1,5 +1,5 @@
-"""Tests for toolsets.skills — SKILL.md discovery, the progressive-
-disclosure index, and the load_skill tool."""
+"""Tests for toolsets.skills — SKILL.md discovery in ./.agents/skills and
+~/.agents/skills, the progressive-disclosure index, and the load_skill tool."""
 
 import pytest
 
@@ -8,13 +8,25 @@ from make_harness.toolsets import skills
 
 @pytest.fixture
 def skills_dir(tmp_path, monkeypatch):
-    """Run inside a temp cwd; skills are discovered under ./skills."""
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
+    """Run inside a temp cwd with an empty temp home; returns the project's
+    ./.agents/skills directory."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    return project / ".agents" / "skills"
+
+
+@pytest.fixture
+def home_skills_dir(skills_dir, tmp_path):
+    return tmp_path / "home" / ".agents" / "skills"
 
 
 def _write_skill(base, folder, name=None, description="", body="Do the thing."):
-    d = base / "skills" / folder
+    d = base / folder
     d.mkdir(parents=True)
     frontmatter = "---\n"
     if name is not None:
@@ -24,7 +36,7 @@ def _write_skill(base, folder, name=None, description="", body="Do the thing."):
 
 
 def _write_raw(base, folder, text):
-    d = base / "skills" / folder
+    d = base / folder
     d.mkdir(parents=True)
     (d / "SKILL.md").write_text(text, encoding="utf-8")
 
@@ -51,17 +63,34 @@ class TestDiscover:
         assert skills.discover()["when"][0] == "Use when: the user says: go"
 
     def test_crlf_frontmatter_parses(self, skills_dir):
-        d = skills_dir / "skills" / "win"
+        d = skills_dir / "win"
         d.mkdir(parents=True)
         (d / "SKILL.md").write_bytes(b"---\r\nname: win\r\ndescription: CRLF file.\r\n---\r\nBody line.\r\n")
         assert skills.discover()["win"] == ("CRLF file.", "Body line.")
+
+    def test_multi_line_yaml_description_is_folded_to_one_line(self, skills_dir):
+        _write_raw(skills_dir, "long", "---\nname: long\ndescription: >\n  Spans two\n  lines.\n---\nbody")
+        assert skills.discover()["long"] == ("Spans two lines.", "body")
+
+    def test_quoted_yaml_values_are_unquoted(self, skills_dir):
+        _write_raw(skills_dir, "q", '---\nname: "q"\ndescription: "Has: a colon"\n---\nbody')
+        assert skills.discover()["q"] == ("Has: a colon", "body")
+
+    def test_home_skills_are_discovered(self, home_skills_dir):
+        _write_skill(home_skills_dir, "mine", name="mine", description="Personal skill.")
+        assert skills.discover() == {"mine": ("Personal skill.", "Do the thing.")}
+
+    def test_project_skill_wins_a_name_clash_with_home(self, skills_dir, home_skills_dir):
+        _write_skill(skills_dir, "shared", name="shared", description="project", body="P")
+        _write_skill(home_skills_dir, "shared", name="shared", description="home", body="H")
+        assert skills.discover()["shared"] == ("project", "P")
 
     def test_extra_frontmatter_fields_are_ignored(self, skills_dir):
         _write_raw(skills_dir, "extra", "---\nname: extra\ndescription: d\nversion: 2\n---\nbody")
         assert skills.discover()["extra"] == ("d", "body")
 
     def test_bundled_commit_messages_skill_is_discoverable(self):
-        # skills/commit-messages/SKILL.md ships with the repo — this guards
+        # .agents/skills/commit-messages/SKILL.md ships with the repo — this guards
         # against its frontmatter silently breaking. No temp cwd: it must be
         # found from the real project root.
         description, body = skills.discover()["commit-messages"]
