@@ -8,6 +8,7 @@ so the trigger for a pluggable mechanism is now real.
 
 from make_harness import compact as compaction
 from make_harness import history
+from make_harness.toolsets import todos
 
 _COMMANDS = {}
 
@@ -35,8 +36,9 @@ def run(text, messages, log, llm=None):
 
 @command
 def clear(messages, llm, log):
-    """Clear the conversation history, keeping the system prompt (and the
-    memory/skills index folded into it) so context isn't lost."""
+    """Clear the conversation history and the todo list, keeping the system
+    prompt (and the memory/skills index folded into it) so context isn't lost."""
+    todos.clear()
     return [messages[0]], "Conversation cleared — system prompt and memory/skills index kept."
 
 

@@ -14,14 +14,21 @@ class Registry:
     def __init__(self):
         self._tools = {}
 
-    def tool(self, func):
-        sig = inspect.signature(func)
-        props = {}
-        required = []
-        for name, param in sig.parameters.items():
-            props[name] = {"type": _PY_TO_JSON.get(param.annotation, "string")}
-            if param.default is inspect.Parameter.empty:
-                required.append(name)
+    def tool(self, func=None, *, parameters=None):
+        """Register `func`. Its parameters schema is generated from the
+        signature, unless `parameters` spells it out — for arguments richer
+        than str/int/float/bool, like a list of objects. Usable bare
+        (@tool) or with arguments (@tool(parameters=...))."""
+        if func is None:
+            return lambda f: self.tool(f, parameters=parameters)
+        if parameters is None:
+            props = {}
+            required = []
+            for name, param in inspect.signature(func).parameters.items():
+                props[name] = {"type": _PY_TO_JSON.get(param.annotation, "string")}
+                if param.default is inspect.Parameter.empty:
+                    required.append(name)
+            parameters = {"type": "object", "properties": props, "required": required}
         self._tools[func.__name__] = {
             "func": func,
             "schema": {
@@ -29,7 +36,7 @@ class Registry:
                 "function": {
                     "name": func.__name__,
                     "description": inspect.getdoc(func) or "",
-                    "parameters": {"type": "object", "properties": props, "required": required},
+                    "parameters": parameters,
                 },
             },
         }

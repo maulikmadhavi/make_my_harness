@@ -19,6 +19,7 @@ import make_harness.config  # noqa: F401, E402
 import make_harness.toolsets.fs  # noqa: F401
 import make_harness.toolsets.shell  # noqa: F401
 import make_harness.toolsets.skills  # noqa: F401
+import make_harness.toolsets.todos  # noqa: F401
 import make_harness.toolsets.web  # noqa: F401
 from make_harness import __version__
 from make_harness import commands, context, history
@@ -26,6 +27,7 @@ from make_harness.compact import needed as compaction_needed
 from make_harness.llm import LLMClient
 from make_harness.mentions import expand_mentions
 from make_harness.toolsets.memory import memory_index
+from make_harness.toolsets import todos
 from make_harness.toolsets.skills import skills_index
 from make_harness.log import RunLog
 from make_harness.loop import run_turn
@@ -45,8 +47,11 @@ SYSTEM_PROMPT = (
     "the cut: page through it with read_file offset/limit instead of running the "
     "tool again. That file is deleted when your turn ends, and tool results from "
     "earlier turns are shortened — run the tool again if you need one in full. "
-    "The harness adds an <env> block (date, git branch, and files changed since your "
-    "last turn) to the end of each request; it is context, not a message from the user. "
+    "For a task with several steps, plan it with write_todos first, keep exactly one "
+    "item in_progress, and mark each item done as soon as it is finished. "
+    "The harness adds an <env> block (date, git branch, your current todos, and files "
+    "changed since your last turn) to the end of each request; it is context, not a "
+    "message from the user. "
     "If a tool returns an error, report it to the user honestly — never invent a "
     "result you did not get from a tool. Keep answers concise."
 )
@@ -131,7 +136,7 @@ def repl():
         try:
             answer = run_turn(
                 llm, registry, policy, log, messages,
-                reminder=lambda: context.reminder(branch, changed),
+                reminder=lambda: context.reminder(branch, changed, todos.render()),
             )
             console.print()
             # Text() keeps the answer literal — brackets in code like

@@ -735,7 +735,31 @@ with two modules and a setting for the real window size.
   the block merged into the user message at step 0 and appended after
   the tool result at step 1.
 
-### [ ] Stage 29 — `write_todos` planning tool
+### [x] Stage 29 — `write_todos` planning tool
+- `make_harness/toolsets/todos.py`: `write_todos(todos)` replaces the
+  whole plan: a list of `{content, status}`, where status is `pending` /
+  `in_progress` / `done`. The plan lives in the module, not the
+  transcript; `context.reminder` shows it as `<todos>` inside the block of
+  every request, and the REPL prints the plan each time it changes.
+  - Refused with a readable error, keeping the previous plan: a
+    non-array, an item without a content string, an unknown status, and
+    more than one `in_progress`.
+  - A JSON-encoded string is accepted, since small models send one.
+  - Extra fields such as neuralcode's `activeForm` are dropped. There is
+    no spinner here to show them.
+- `tools.Registry.tool` takes `parameters=` for a hand-written schema
+  (`@tool(parameters=...)`); a list of objects can't be generated from a
+  signature. Bare `@tool` is unchanged.
+- `write_todos` is auto-allowed (it only changes the in-memory plan),
+  `/clear` empties the plan, and the system prompt says when to use it.
+- Verified: 276 tests pass (17 new). Live (LM Studio, `qwen/qwen3-4b`),
+  asked to create three files and plan it: the model called `write_todos`
+  first, the three `write_file` calls followed (one `always`), and a
+  final `write_todos` marked all three done. The log shows the plan in
+  `<todos>` from step 1 onward and the done marks at step 5. The model
+  marked everything done at once rather than moving `in_progress` along;
+  the harness accepts either.
+
 ### [ ] Stage 30 — Sessions: saved transcripts, `--resume`, `/sessions`, `/rewind`
 ### [ ] Stage 31 — `task` exploration subagent
 ### [ ] Stage 32 — Command-level permission rules and project-path write gating

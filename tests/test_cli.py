@@ -23,7 +23,7 @@ class TestStartupWiring:
     def test_registers_the_documented_toolset(self):
         names = {t["function"]["name"] for t in registry.schemas()}
         assert {
-            "read_file", "write_file", "str_replace", "run_command", "load_skill",
+            "read_file", "write_file", "str_replace", "run_command", "load_skill", "write_todos",
             "web_search", "http_request", "save_memory", "read_memory",
         } <= names
 

@@ -5,6 +5,7 @@ sits after everything the server may have cached, so it costs no cache hits,
 and the transcript's own prefix never changes because of it.
 
   <env>                date and time, git branch
+  <todos>              the current plan (toolsets/todos.py)
   <system-reminder>    files git sees changing between the agent's turns
 
 ChangeTracker takes a snapshot when a turn ends and compares against it
@@ -82,9 +83,11 @@ class ChangeTracker:
         return changed
 
 
-def reminder(branch_name, changed=None):
+def reminder(branch_name, changed=None, todos=""):
     """The text of the block for one request."""
     lines = ["<env>", f"date: {datetime.now():%Y-%m-%d %H:%M}", f"git branch: {branch_name}", "</env>"]
+    if todos:
+        lines += ["<todos>", todos, "</todos>"]
     if changed:
         lines += ["<system-reminder>", "These files changed since your last turn. Read them again before editing:"]
         lines += [f"{label}: {path}" for path, label in changed.items()]

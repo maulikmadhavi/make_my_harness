@@ -87,6 +87,26 @@ def test_annotations_map_to_json_types_and_defaults_drop_out_of_required():
     assert parameters["required"] == ["count", "ratio", "flag", "label", "mystery"]
 
 
+def test_explicit_parameters_replace_the_generated_schema():
+    reg = Registry()
+    parameters = {
+        "type": "object",
+        "properties": {"items": {"type": "array", "items": {"type": "string"}}},
+        "required": ["items"],
+    }
+
+    @reg.tool(parameters=parameters)
+    def count(items: list) -> str:
+        """Counts."""
+        return str(len(items))
+
+    schema = reg.schemas()[0]["function"]
+    assert schema["parameters"] == parameters
+    assert schema["description"] == "Counts."
+    assert reg.execute("count", {"items": ["a", "b"]}) == "2"
+    assert count(["x"]) == "1"  # the decorator still hands back the function
+
+
 def test_missing_docstring_gives_an_empty_description():
     reg = Registry()
 
