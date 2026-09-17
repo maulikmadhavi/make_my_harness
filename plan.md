@@ -554,6 +554,65 @@ editable Buffer exists.
   the static demo in a real terminal; this needs a human to actually
   look at it before Stage 20 builds threading on top.
 
+## Part 2 — Aligning with neuralcode (2026-09-17)
+
+User-requested: bring the harness in line with
+[avbiswas/neural-code](https://github.com/avbiswas/neural-code), a
+minimal Python coding-agent harness built the same way (one commit per
+stage). The user chose all four feature groups (core agent tools,
+sessions, context + subagents, safety) and to mirror its conventions
+closely: the `openai` SDK, `BASE_URL` / `API_KEY` / `MODEL`, and the
+`.agents/` directory layout. Pixi stays the environment manager.
+
+neuralcode ships without a license file, so nothing is copied from it:
+each stage re-implements the idea in this codebase's own shape (the
+`@tool` registry, `run_turn`, `Policy`, the JSONL log), and keeps what
+neuralcode doesn't have (Windows support, memory, web tools, `@path`
+mentions, the repeat short-circuit, the test suite).
+
+Stages 20–23 were the full-screen TUI, since removed, so Part 2 starts at 24.
+
+### [x] Stage 24 — OpenAI SDK + `config.py`
+- `make_harness/config.py`: the env-file loader moves here from `cli.py`,
+  now reading `./.env` then `~/.agents/env` (was `~/.make_harness/.env`
+  and the repo root). `backend()` returns `(BASE_URL, API_KEY, MODEL)`,
+  read when a client is built so tests can set them; BASE_URL and MODEL
+  are required. The old names (`LLM_ENDPOINT`, `LLM_MODEL`,
+  `LLM_API_KEY`, `GROQ_API_KEY`) are not read any more, but when they
+  are set the startup error names what each was renamed to.
+- `make_harness/llm.py` now wraps `openai.OpenAI`; `llm_providers.py`
+  (hand-rolled `requests` calls, a Groq subclass, a factory) is deleted.
+  `complete()` keeps its plain-dict contract, so nothing downstream
+  changed, and gains normalized `usage` (prompt, completion, reasoning
+  and cached tokens) and a `reasoning_content` fallback for vLLM /
+  LM Studio. Local servers get a placeholder key, because the SDK refuses
+  an empty one.
+- The first attempt sends no temperature (was 0.2): some models reject
+  any explicit value. The tool_use_failed retry ladder is now
+  `[None, 0.6, 1.0]`. Salvage reads `BadRequestError.body` — the SDK
+  hands over the parsed error object, and `str(e)` is a Python repr the
+  old JSON parse could not read.
+- `cli.py` exits with `error: ...` instead of a traceback when no
+  backend is configured.
+- Verified: 206 tests pass. `tests/test_llm.py` drives the real SDK over
+  an `httpx2.MockTransport`, so request serialization, response parsing
+  and error mapping are the SDK's own. Live smoke against LM Studio
+  (`qwen/qwen3-4b`): a `read_file` round-trip answered correctly, and the
+  logged response carries `usage`. Launched with the developer's old
+  `.env`, startup printed the rename hint for `LLM_ENDPOINT`,
+  `LLM_MODEL` and `GROQ_API_KEY`.
+
+### [ ] Stage 25 — `.agents/` layout: skills directories and input history
+### [ ] Stage 26 — `str_replace` edit tool
+### [ ] Stage 27 — Context management: cap/spill, strip, fit, usage-triggered compaction
+### [ ] Stage 28 — Per-turn `<env>` block: time, git branch, changed files
+### [ ] Stage 29 — `write_todos` planning tool
+### [ ] Stage 30 — Sessions: saved transcripts, `--resume`, `/sessions`, `/rewind`
+### [ ] Stage 31 — `task` exploration subagent
+### [ ] Stage 32 — Command-level permission rules and project-path write gating
+### [ ] Stage 33 — bubblewrap sandbox for shell commands on Linux
+### [ ] Stage 34 — Docs: README, architecture.md
+
 ## Deliberately NOT built
 
 - **Event bus** — considered and explicitly rejected (not just deferred).
