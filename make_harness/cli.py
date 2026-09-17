@@ -32,7 +32,8 @@ from make_harness.toolsets.skills import skills_index
 from make_harness.log import RunLog
 from make_harness.loop import run_turn
 from make_harness.policy import Policy
-from make_harness.prompt import make_input
+from make_harness.prompt import make_chooser, make_input
+from make_harness.session import Session, preview
 from make_harness.tools import registry
 from make_harness.ui import bold, cyan
 
@@ -57,7 +58,7 @@ SYSTEM_PROMPT = (
 )
 
 
-def repl():
+def repl(resume=False):
     # Built here rather than at module scope so `--version` doesn't pay for it,
     # and so make_harness.ui (imported above) has already switched the legacy
     # Windows console into VT mode before rich caches its render-path decision.
@@ -82,6 +83,7 @@ def repl():
     skills = skills_index()
     if skills:
         system += "\n\nAvailable skills (use load_skill for full instructions):\n" + skills
+    ctx = commands.Context(log=log, llm=llm, session=Session(), ask=make_chooser(), system_prompt=system)
     messages = [{"role": "system", "content": system}]
     tool_names = ", ".join(t["function"]["name"] for t in registry.schemas())
 
@@ -98,10 +100,20 @@ def repl():
     console.print(f"[dim]tools: {tool_names}[/dim]")
     console.print()
     console.print("[dim]Shortcuts:[/dim]")
-    console.print("  [cyan]@path[/cyan]     Attach files/folders")
-    console.print("  [cyan]/clear[/cyan]    Reset conversation (memory kept)")
-    console.print("  [cyan]/compact[/cyan]  Summarize history to free context")
-    console.print("  [cyan]/exit[/cyan]     Quit (exit and quit work too)")
+    console.print("  [cyan]@path[/cyan]      Attach files/folders")
+    console.print("  [cyan]/clear[/cyan]     Reset conversation (memory kept)")
+    console.print("  [cyan]/compact[/cyan]   Summarize history to free context")
+    console.print("  [cyan]/rewind[/cyan]    Go back to before an earlier message")
+    console.print("  [cyan]/sessions[/cyan]  Open a saved chat")
+    console.print("  [cyan]/exit[/cyan]      Quit (exit and quit work too)")
+    if resume:
+        saved = ctx.session.list()
+        if saved:
+            messages = commands.reopen(ctx.session.open(saved[0]["id"]), ctx)
+            console.print(f"\n[dim]resumed {saved[0]['id']} ({len(messages)} messages)[/dim]")
+            console.print(f"[dim]{escape(preview(messages))}[/dim]")
+        else:
+            console.print("\n[dim]No saved chat for this directory yet; starting a new one.[/dim]")
     console.print()
     read_input = make_input()
 
@@ -117,11 +129,12 @@ def repl():
         if user.lower() in ("exit", "quit"):
             break
         if user.startswith("/"):
-            new_messages, output = commands.run(user, messages, log, llm)
+            new_messages, output = commands.run(user, messages, ctx)
             console.print(f"[dim]{escape(output)}[/dim]")
             if new_messages is None:
                 break
             messages = new_messages
+            ctx.session.save(messages)
             continue
 
         expanded, attached = expand_mentions(user)
@@ -148,13 +161,15 @@ def repl():
             log.event("error", error=f"{type(e).__name__}: {e}")
             console.print(f"[bold red]error:[/bold red] {escape(str(e))}")
         finally:
-            # The turn is over: bin its temp files and shrink the tool output
-            # it produced (history.py).
+            # The turn is over. Save it while tool results are still whole,
+            # then bin its temp files and shrink the tool output it produced
+            # (history.py).
+            ctx.session.save(messages)
             history.sweep()
             history.strip(messages)
             tracker.snapshot()
         if compaction_needed(llm.last_usage, messages):
-            messages, output = commands.compact(messages, llm, log)
+            messages, output = commands.compact(messages, ctx)
             console.print(f"[dim]{escape(output)}[/dim]")
 
 
@@ -165,9 +180,10 @@ def main():
         "permissions, memory, and context compaction.",
     )
     parser.add_argument("--version", action="version", version=f"make-harness {__version__}")
-    parser.parse_args()
+    parser.add_argument("--resume", action="store_true", help="continue the most recent chat in this directory")
+    args = parser.parse_args()
 
-    repl()
+    repl(resume=args.resume)
 
 
 if __name__ == "__main__":

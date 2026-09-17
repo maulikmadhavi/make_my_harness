@@ -92,7 +92,7 @@ def test_no_plan_means_no_todos_tag():
 
 def test_clear_command_also_clears_the_plan():
     todos.write_todos(PLAN)
-    commands.run("/clear", [{"role": "system", "content": "s"}], StubLog())
+    commands.run("/clear", [{"role": "system", "content": "s"}], commands.Context(log=StubLog()))
     assert todos.render() == ""
 
 

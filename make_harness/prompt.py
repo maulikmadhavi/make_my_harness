@@ -112,6 +112,10 @@ def make_chooser():
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
 
         def ask(prompt_text, choices):
+            # A numbered list (/sessions, /rewind) means nothing without its
+            # labels, which the terminal dropdown would have shown.
+            if any(value.isdigit() for value, _ in choices):
+                print("\n".join(f"  {value}) {label}" for value, label in choices))
             hint = "/".join(value for value, _ in choices)
             while True:
                 matched = _match_choice(input(f"{prompt_text}[{hint}] "), choices)

@@ -65,6 +65,27 @@ class TestEntryPoint:
         assert "make-harness" in out  # banner printed
         assert "error:" not in out  # exited before any LLM round-trip
 
+    def test_resume_continues_the_last_chat_in_this_directory(self, tmp_path):
+        # The first run's turn fails against the unreachable endpoint, but the
+        # message it sent is still saved, which is all --resume needs.
+        home = tmp_path / "home"
+        project = tmp_path / "project"
+        project.mkdir()
+        dirs = {"HOME": str(home), "USERPROFILE": str(home)}
+        first = _run_cli(cwd=project, stdin=b"remember the blue door\nexit\n", **UNREACHABLE, **dirs)
+        assert first.returncode == 0
+        second = _run_cli("--resume", cwd=project, stdin=b"exit\n", **UNREACHABLE, **dirs)
+        out = second.stdout.decode("utf-8", errors="replace")
+        assert second.returncode == 0
+        assert "resumed " in out
+        assert "you > remember the blue door" in out
+
+    def test_resume_with_nothing_saved_starts_fresh(self, tmp_path):
+        home = tmp_path / "home"
+        proc = _run_cli("--resume", cwd=tmp_path, stdin=b"exit\n", **UNREACHABLE, HOME=str(home), USERPROFILE=str(home))
+        assert proc.returncode == 0
+        assert "No saved chat for this directory yet" in proc.stdout.decode("utf-8", errors="replace")
+
     def test_piped_slash_exit_stops_before_later_input(self, tmp_path):
         # End of input would stop the REPL on its own, so a bare "/exit"
         # could not show it worked; the "hello" after it would reach the

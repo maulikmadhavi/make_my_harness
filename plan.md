@@ -760,7 +760,55 @@ with two modules and a setting for the real window size.
   marked everything done at once rather than moving `in_progress` along;
   the harness accepts either.
 
-### [ ] Stage 30 — Sessions: saved transcripts, `--resume`, `/sessions`, `/rewind`
+### [x] Stage 30 — Sessions: saved transcripts, `--resume`, `/sessions`, `/rewind`
+- `make_harness/session.py`: one append-only JSONL transcript per chat
+  at `~/.agents/sessions/<project>/<id>.jsonl`, where `<project>` is the
+  launch directory flattened to `[A-Za-z0-9-]` (no `:` or `\` on
+  Windows). Messages are appended as the conversation grows. History
+  rewrites are recorded as entries instead of edits — `{"rewind_to": n}`
+  and `{"replace": [...]}` (compaction) — so `load()` replays the file and
+  nothing written is lost. A half-written last line from a killed process
+  is skipped. The file is separate from the `logs/` run log, which records
+  every event for debugging; this keeps only what is needed to carry a
+  conversation on.
+- Saving: the REPL saves when a turn ends, before `history.strip`, so the
+  file keeps tool results in full, and again after every command.
+  Nothing is written until there is a first message, so no empty
+  sessions are created.
+- `commands.py`: every command is now `func(messages, ctx)`. `Context`
+  bundles the log, LLM, session, a chooser and the current system prompt;
+  the old `(messages, llm, log)` couldn't reach the session or a picker.
+  This is the Stage 10 "Session dataclass" trigger, narrowed to what
+  commands need.
+  - `/sessions` picks another saved chat for this project and opens it.
+  - `/rewind` picks one of the 20 most recent user messages (the
+    compaction note excluded) and drops it and everything after. Only
+    whole exchanges are dropped, so no tool call is left without its
+    result.
+  - `/clear` moves saving to a new session file, and `/compact` records
+    its replacement.
+  - A reopened chat gets today's system prompt (skills and memory may
+    have changed) and has its tool results shortened again.
+- `make-harness --resume` opens the most recent chat for this directory
+  and prints a short preview of it.
+- Non-terminal chooser: for numbered choices it now prints the
+  `value) label` list first. Found live — piped `/rewind` showed only
+  `[1/2/cancel]`.
+- Verified: 304 tests pass (28 new):
+  - `test_session.py` covers the file format (appends, rewind and
+    replace entries, a torn line, unicode) and switching between files.
+  - `test_commands.py` covers every command against a temp session
+    directory with a scripted chooser.
+  - Two subprocess tests run `--resume` against a temp home. The first
+    run's turn fails on an unreachable endpoint, but its message is saved
+    and shows up in the second run's preview.
+  - Live (LM Studio, `qwen/qwen3-4b`): run A saved "my favourite colour
+    is teal"; run B with `--resume` showed the preview, answered "teal",
+    and `/rewind` → `1` dropped that question; run C with `--resume`
+    showed only the first exchange. The file ends in `{"rewind_to": 3}`
+    with the dropped lines still above it. The test session directory was
+    deleted afterwards.
+
 ### [ ] Stage 31 — `task` exploration subagent
 ### [ ] Stage 32 — Command-level permission rules and project-path write gating
 ### [ ] Stage 33 — bubblewrap sandbox for shell commands on Linux

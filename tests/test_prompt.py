@@ -157,3 +157,14 @@ class TestChooserFallback:
         responses = iter(["banana", "y"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
         assert make_chooser()("allow? ", _YNAD) == "yes"
+
+    def test_a_numbered_list_prints_its_labels(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda prompt: "2")
+        choices = [("1", "newest chat"), ("2", "older chat"), ("cancel", "Cancel")]
+        assert make_chooser()("open chat: ", choices) == "2"
+        assert capsys.readouterr().out == "  1) newest chat\n  2) older chat\n  cancel) Cancel\n"
+
+    def test_named_choices_print_no_list(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda prompt: "yes")
+        make_chooser()("allow? ", _YNAD)
+        assert capsys.readouterr().out == ""
