@@ -6,9 +6,8 @@ cli.py. This was flagged as premature during the Stage 7 feedback review
 so the trigger for a pluggable mechanism is now real.
 """
 
-import copy
-
-from make_harness import context
+from make_harness import compact as compaction
+from make_harness import history
 
 _COMMANDS = {}
 
@@ -43,20 +42,21 @@ def clear(messages, llm, log):
 
 @command
 def compact(messages, llm, log):
-    """Compact the conversation now rather than at HARNESS_TOKEN_BUDGET.
-    budget=1 is one nothing fits under, so every compaction step runs. It
-    works on a copy, and hands back the original when the call fails
-    (cli.py runs commands outside the turn's try) or when the result is no
-    smaller — a summary of a short history can outgrow it."""
-    before = context.estimate_tokens(messages)
+    """Summarize the older part of the conversation now, instead of waiting
+    for it to cross COMPACT_AT of the context window. The REPL also calls
+    this after a turn that crossed it. The original comes back unchanged
+    when the summary call fails — the window is nearly full, the worst
+    moment to lose the conversation to a rate limit."""
+    before = history.estimate(messages)
     try:
-        new_messages = context.compact(copy.deepcopy(messages), llm, log, budget=1)
+        new_messages = compaction.compact(messages, llm, log)
     except Exception as e:
         return messages, f"Compaction failed, conversation unchanged: {type(e).__name__}: {e}"
-    after = context.estimate_tokens(new_messages)
-    if after >= before:
-        return messages, f"Nothing to compact (~{before} tokens)."
-    return new_messages, f"Compacted: ~{before} -> ~{after} tokens."
+    if new_messages is None:
+        return messages, f"Nothing old enough to compact yet (~{before} tokens)."
+    if new_messages is messages:
+        return messages, f"The summary came out no smaller than the history it would replace; kept the original (~{before} tokens)."
+    return new_messages, f"Compacted: ~{before} -> ~{history.estimate(new_messages)} tokens."
 
 
 @command

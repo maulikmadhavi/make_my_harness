@@ -57,6 +57,13 @@ def load_env_file():
 
 load_env_file()
 
+# How much room the model has, and how it is spent. CONTEXT_WINDOW is the
+# context length the server actually loads the model with, in tokens —
+# 8192 for a small local model, not the 128k it may advertise.
+CONTEXT_WINDOW = int(os.getenv("CONTEXT_WINDOW", "128000"))
+COMPACT_AT = 0.85  # compact once a request crosses this share of the window
+COMPACT_TO = 0.35  # keeping a recent tail this big, so it doesn't fire again next turn
+
 
 def backend():
     """(base_url, api_key, model) for the LLM, read when a client is built.

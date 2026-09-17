@@ -647,7 +647,61 @@ Stages 20–23 were the full-screen TUI, since removed, so Part 2 starts at 24.
   `str_replace`, the prompt was answered `yes`, and a hex dump showed the
   new value with every line still ending `0D 0A`.
 
-### [ ] Stage 27 — Context management: cap/spill, strip, fit, usage-triggered compaction
+### [x] Stage 27 — Context management: cap/spill, strip, fit, usage-triggered compaction
+Replaces Stage 5's `context.py` (a chars/4 budget, `HARNESS_TOKEN_BUDGET`)
+with two modules and a setting for the real window size.
+- `config.py`: `CONTEXT_WINDOW` (default 128000), `COMPACT_AT = 0.85`,
+  `COMPACT_TO = 0.35`.
+- `make_harness/history.py`, cheapest first:
+  - `cap`: a tool result over 10k chars keeps head + tail inline (the
+    Stage 8 `truncate`), and the whole text is saved to a temp file
+    named at the cut. `sweep` deletes the turn's files when it ends.
+    `run_command` and `http_request` go through it.
+  - `strip`: when a turn ends, its tool results shrink to 300 chars. Old
+    messages then change only between turns, never mid-turn, which keeps
+    the prompt prefix stable for server-side prompt caching.
+  - `fit`: before every request, whole tool results are dropped oldest
+    first while the estimate is over `COMPACT_AT` of the window.
+  - None of the three touch the frozen prefix: everything up to and
+    including the newest `<summary>` note.
+- `make_harness/compact.py`: after a turn, compaction runs when the
+  server's `prompt_tokens` for the last request (or the estimate, if the
+  server sends no usage) crosses `COMPACT_AT` of the window.
+  `LLMClient.last_usage` carries that count. The transcript becomes
+  system + a `<summary>` handoff note (Goal / Decisions / Files / State /
+  Next step) + a recent tail of ~`COMPACT_TO` of the window, cut so no
+  tool result loses its call. It returns `None` when nothing is old
+  enough (no LLM call), and the original list when the note came out no
+  smaller. `/compact` runs the same thing and says which case happened.
+  The `compaction` log event records the summary text.
+- `read_file(path, offset=1, limit=2000)` now pages. It stops on a line
+  boundary at 10k chars and says `[not the end of the file: N more lines
+  — continue with offset=M]`. That paging is how the agent reads a
+  spilled file on any OS.
+- The loop prints `tokens: N in · N out · N cached` after each request,
+  so a user can see how close a model runs to its window.
+- Learned live (LM Studio, `qwen/qwen3-4b`, deliberately tiny windows):
+  - Told that the full output was saved, the model paged the file even
+    though head + tail already held the last line. It then misread
+    `[truncated: …]` as the end of the file. Both markers were reworded
+    to say only the middle was cut and that the file continues.
+  - With the transcript sent bare as the summarizer's user message, the
+    note answered, or took as its goal, the transcript's last `USER:`
+    line, and a codeword from the first turn was lost. The transcript now
+    goes inside `<transcript>` tags with the instruction after it.
+  - A 4B model's note can outgrow a tiny history, which is why the
+    no-smaller check exists and why `/compact` reports it separately
+    from "nothing old enough".
+- Verified: 247 tests pass. `test_context.py` is replaced by
+  `test_history.py` and `test_compact.py`; a conftest fixture sweeps
+  spilled files after each test. Live, with `CONTEXT_WINDOW=1800`: six
+  turns triggered one kept-original and two real compactions, the codeword
+  from turn 1 was in every summary, and after both compactions the model
+  answered `PINEAPPLE-42`. With `CONTEXT_WINDOW=6000`, a 27k-char command
+  output was capped and spilled, and `fit` dropped old results mid-turn.
+  No `make-harness-*.txt` files were left in the temp directory.
+
+### [ ] Stage 28 — Per-turn `<env>` block: time, git branch, changed files
 ### [ ] Stage 28 — Per-turn `<env>` block: time, git branch, changed files
 ### [ ] Stage 29 — `write_todos` planning tool
 ### [ ] Stage 30 — Sessions: saved transcripts, `--resume`, `/sessions`, `/rewind`

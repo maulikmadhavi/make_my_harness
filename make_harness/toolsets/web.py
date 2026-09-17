@@ -5,10 +5,8 @@ import os
 
 import requests
 
+from make_harness.history import cap
 from make_harness.tools import tool
-from make_harness.toolsets import truncate
-
-MAX_OUTPUT = 10_000
 
 
 @tool
@@ -49,4 +47,4 @@ def http_request(method: str, url: str, headers_json: str = "", body_json: str =
     headers = json.loads(headers_json) if headers_json else {}
     body = json.loads(body_json) if body_json else None
     r = requests.request(method.upper(), url, headers=headers, json=body, timeout=30)
-    return f"status: {r.status_code}\n{truncate(r.text, MAX_OUTPUT)}"
+    return f"status: {r.status_code}\n{cap(r.text)}"

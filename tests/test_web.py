@@ -116,7 +116,7 @@ class TestHttpRequest:
         responses["request"] = FakeResponse(text="H" + "m" * 30_000 + "T")
         out = web.http_request("get", "https://x")
         assert "chars truncated" in out
-        assert out.endswith("T")
+        assert "T\n[full output (30002 chars) saved to " in out  # tail kept, whole body spilled
         assert len(out) < 11_000
 
     def test_bad_headers_json_is_a_tool_error_string(self, fake_requests):

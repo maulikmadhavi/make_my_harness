@@ -3,16 +3,30 @@ from pathlib import Path
 from make_harness.tools import tool
 
 MAX_LINES = 2000
+MAX_CHARS = 10_000  # same inline budget as history.CAP
 
 
 @tool
-def read_file(path: str) -> str:
-    """Read a text file and return its contents with line numbers."""
+def read_file(path: str, offset: int = 1, limit: int = MAX_LINES) -> str:
+    """Read a text file and return its contents with line numbers. offset is the first line to read (1-based) and limit the most lines to return; use them to page through a long file."""
     lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
-    out = "\n".join(f"{i + 1}\t{line}" for i, line in enumerate(lines[:MAX_LINES]))
-    if len(lines) > MAX_LINES:
-        out += f"\n[truncated: {len(lines) - MAX_LINES} more lines]"
-    return out or "[empty file]"
+    start = max(offset, 1) - 1
+    out, size = [], 0
+    # Stop at whichever comes first: `limit` lines or MAX_CHARS characters.
+    # Cutting on a line boundary means the next page starts exactly where
+    # this one stopped.
+    for number, line in enumerate(lines[start : start + max(limit, 1)], start + 1):
+        entry = f"{number}\t{line}"
+        if out and size + len(entry) > MAX_CHARS:
+            break
+        out.append(entry)
+        size += len(entry) + 1
+    if not out:
+        return "[empty file]" if not lines else f"[no lines at offset {offset}: the file has {len(lines)} lines]"
+    remaining = len(lines) - (start + len(out))
+    if remaining > 0:
+        out.append(f"[not the end of the file: {remaining} more lines — continue with offset={start + len(out) + 1}]")
+    return "\n".join(out)
 
 
 @tool

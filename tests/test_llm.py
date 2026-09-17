@@ -150,6 +150,16 @@ class TestCompleteResult:
     def test_usage_is_empty_when_the_server_reports_none(self):
         assert Server(_ok()).client().complete(HI)["usage"] == {}
 
+    def test_last_usage_tracks_the_latest_request(self):
+        usage = {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}
+        server = Server(_ok(usage=usage), _ok())
+        llm = server.client()
+        assert llm.last_usage == {}
+        llm.complete(HI)
+        assert llm.last_usage["prompt_tokens"] == 5
+        llm.complete(HI)
+        assert llm.last_usage == {}  # a response without usage doesn't keep the stale count
+
     def test_missing_detail_blocks_leave_those_counts_none(self):
         usage = {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}
         assert Server(_ok(usage=usage)).client().complete(HI)["usage"] == {

@@ -1,9 +1,8 @@
 import subprocess
 
+from make_harness.history import cap
 from make_harness.tools import tool
-from make_harness.toolsets import truncate
 
-MAX_OUTPUT = 10_000
 TIMEOUT = 60
 
 
@@ -16,5 +15,5 @@ def run_command(command: str) -> str:
         )
     except subprocess.TimeoutExpired:
         return f"Error: command timed out after {TIMEOUT}s"
-    out = truncate((proc.stdout + proc.stderr).strip(), MAX_OUTPUT)
+    out = cap((proc.stdout + proc.stderr).strip())
     return f"exit code: {proc.returncode}\n{out}" if out else f"exit code: {proc.returncode} (no output)"

@@ -7,6 +7,7 @@ and a one-line trace of each tool call is printed for the REPL.
 
 import json
 
+from make_harness import history
 from make_harness.ui import dim, yellow
 
 
@@ -35,12 +36,27 @@ SHORT_CIRCUIT_RESULT = (
 DENIED_RESULT = "Denied by user."
 
 
+def _usage_line(usage):
+    """'1234 in · 56 out · 800 cached' — the parts the server reported."""
+    parts = [
+        f"{usage[key]} {label}"
+        for key, label in (("prompt_tokens", "in"), ("completion_tokens", "out"), ("cached_tokens", "cached"))
+        if usage.get(key)
+    ]
+    return "  tokens: " + " · ".join(parts) if parts else None
+
+
 def run_turn(llm, registry, policy, log, messages, max_steps=15):
     last_executed = None  # (name, canonical args) of the last call actually run
     for step in range(max_steps):
+        if dropped := history.fit(messages):
+            print(yellow(f"  dropped {dropped} old tool result(s) to fit the context window"))
+            log.event("context_fit", step=step, dropped=dropped)
         log.event("llm_request", step=step, messages=messages)
         resp = llm.complete(messages, tools=registry.schemas() or None)
         log.event("llm_response", step=step, raw=resp["raw"])
+        if line := _usage_line(resp.get("usage") or {}):
+            print(dim(line))
 
         if not resp["tool_calls"]:
             messages.append({"role": "assistant", "content": resp["content"] or ""})

@@ -11,8 +11,8 @@ from rich.panel import Panel
 from rich.text import Text
 
 # Imported first, before any other harness module: it loads the .env file at
-# import time, and context.TOKEN_BUDGET and ui.ENABLED read their settings at
-# *their* import time, below.
+# import time, and settings like config.CONTEXT_WINDOW and ui.ENABLED are read
+# at import time too.
 import make_harness.config  # noqa: F401, E402
 
 # Importing a toolset registers its tools with the shared registry.
@@ -21,8 +21,8 @@ import make_harness.toolsets.shell  # noqa: F401
 import make_harness.toolsets.skills  # noqa: F401
 import make_harness.toolsets.web  # noqa: F401
 from make_harness import __version__
-from make_harness import commands
-from make_harness.context import compact
+from make_harness import commands, history
+from make_harness.compact import needed as compaction_needed
 from make_harness.llm import LLMClient
 from make_harness.mentions import expand_mentions
 from make_harness.toolsets.memory import memory_index
@@ -41,6 +41,10 @@ SYSTEM_PROMPT = (
     "Use your tools to read/write files and run commands when the task needs it. "
     "Edit existing files with str_replace; use write_file only to create a file or "
     "replace all of it. "
+    "Long tool output is cut down, and the full text saved to a temp file named at "
+    "the cut: page through it with read_file offset/limit instead of running the "
+    "tool again. That file is deleted when your turn ends, and tool results from "
+    "earlier turns are shortened — run the tool again if you need one in full. "
     "If a tool returns an error, report it to the user honestly — never invent a "
     "result you did not get from a tool. Keep answers concise."
 )
@@ -118,7 +122,6 @@ def repl():
         log.event("user_message", content=user, attachments=attached)
         messages.append({"role": "user", "content": expanded})
         try:
-            messages = compact(messages, llm, log)
             answer = run_turn(llm, registry, policy, log, messages)
             console.print()
             # Text() keeps the answer literal — brackets in code like
@@ -129,6 +132,14 @@ def repl():
         except Exception as e:
             log.event("error", error=f"{type(e).__name__}: {e}")
             console.print(f"[bold red]error:[/bold red] {escape(str(e))}")
+        finally:
+            # The turn is over: bin its temp files and shrink the tool output
+            # it produced (history.py).
+            history.sweep()
+            history.strip(messages)
+        if compaction_needed(llm.last_usage, messages):
+            messages, output = commands.compact(messages, llm, log)
+            console.print(f"[dim]{escape(output)}[/dim]")
 
 
 def main():

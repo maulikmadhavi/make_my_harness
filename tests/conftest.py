@@ -12,4 +12,16 @@ loader itself lift the switch explicitly (tests/test_config.py).
 
 import os
 
+import pytest
+
 os.environ.setdefault("MAKE_HARNESS_NO_ENV", "1")
+
+
+@pytest.fixture(autouse=True)
+def _sweep_spilled_output():
+    """Delete any temp files history.cap wrote during a test, the way the
+    REPL does when a turn ends."""
+    yield
+    from make_harness import history
+
+    history.sweep()

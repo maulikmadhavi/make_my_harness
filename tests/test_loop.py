@@ -329,6 +329,46 @@ def test_logged_tool_result_is_capped_but_the_message_is_not():
     assert len(messages[2]["content"]) == 5000
 
 
+def test_oversized_history_is_fit_before_the_request(monkeypatch):
+    from make_harness import config
+    from make_harness.history import TRIMMED
+
+    monkeypatch.setattr(config, "CONTEXT_WINDOW", 1000)
+    messages = [
+        {"role": "user", "content": "go"},
+        {"role": "assistant", "content": None, "tool_calls": [_tc("c0", "probe", '{"path": "old"}')]},
+        {"role": "tool", "tool_call_id": "c0", "content": "x" * 8000},
+        {"role": "user", "content": "and now?"},
+    ]
+    seen = []
+
+    class RecordingLLM(ScriptedLLM):
+        def complete(self, messages, tools=None):
+            seen.append(messages[2]["content"])
+            return super().complete(messages, tools)
+
+    log = StubLog()
+    run_turn(RecordingLLM([{"content": "done"}]), _make_registry()[0], AllowAll(), log, messages)
+    assert seen[0].startswith(TRIMMED)  # dropped before the model saw it
+    assert ("context_fit", {"step": 0, "dropped": 1}) in log.events
+
+
+@pytest.mark.parametrize(
+    "usage,expected",
+    [
+        ({"prompt_tokens": 1200, "completion_tokens": 30, "cached_tokens": 800}, "tokens: 1200 in · 30 out · 800 cached"),
+        ({"prompt_tokens": 1200, "completion_tokens": 30, "cached_tokens": None}, "tokens: 1200 in · 30 out"),
+        ({}, None),
+    ],
+    ids=["with-cache", "no-cache-count", "no-usage"],
+)
+def test_usage_line(usage, expected):
+    from make_harness.loop import _usage_line
+
+    line = _usage_line(usage)
+    assert (line.strip() if line else None) == expected
+
+
 def test_assistant_tool_call_message_keeps_both_content_and_calls():
     llm = ScriptedLLM([
         {"content": "let me look", "tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]},

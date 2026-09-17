@@ -69,6 +69,7 @@ class LLMClient:
             model = model or env_model
         self.client = client
         self.model = model
+        self.last_usage = {}  # of the latest request, for compact.needed()
 
     def complete(self, messages, tools=None, retries=2):
         # tool_use_failed: first try to salvage the intended call from the
@@ -94,6 +95,7 @@ class LLMClient:
                         "type": "function",
                         "function": {"name": name, "arguments": arguments},
                     }
+                    self.last_usage = {}
                     return {
                         "content": None,
                         "reasoning": None,
@@ -104,11 +106,12 @@ class LLMClient:
                 if attempt == len(temperatures) - 1:
                     raise
         message = response.choices[0].message.model_dump(exclude_none=True)
+        self.last_usage = _usage(response.usage)
         return {
             "content": message.get("content"),
             # Groq names it reasoning; vLLM and LM Studio reasoning_content.
             "reasoning": message.get("reasoning") or message.get("reasoning_content"),
             "tool_calls": message.get("tool_calls") or [],
-            "usage": _usage(response.usage),
+            "usage": self.last_usage,
             "raw": response.model_dump(exclude_none=True),
         }

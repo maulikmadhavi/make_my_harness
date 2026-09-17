@@ -28,13 +28,37 @@ class TestReadFile:
         p.write_text("", encoding="utf-8")
         assert fs.read_file(str(p)) == "[empty file]"
 
-    def test_caps_at_max_lines(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(fs, "MAX_LINES", 3)
+    @pytest.fixture
+    def five_lines(self, tmp_path):
         p = tmp_path / "long.txt"
         p.write_text("\n".join(f"line {i}" for i in range(1, 6)), encoding="utf-8")
-        out = fs.read_file(str(p))
-        assert out.splitlines()[:3] == ["1\tline 1", "2\tline 2", "3\tline 3"]
-        assert out.endswith("[truncated: 2 more lines]")
+        return str(p)
+
+    def test_limit_caps_the_lines_and_says_where_to_continue(self, five_lines):
+        out = fs.read_file(five_lines, limit=3)
+        assert out.splitlines() == [
+            "1\tline 1", "2\tline 2", "3\tline 3", "[not the end of the file: 2 more lines — continue with offset=4]",
+        ]
+
+    def test_offset_pages_on_from_there(self, five_lines):
+        assert fs.read_file(five_lines, offset=4, limit=3) == "4\tline 4\n5\tline 5"
+
+    def test_offset_past_the_end_says_how_long_the_file_is(self, five_lines):
+        assert fs.read_file(five_lines, offset=9) == "[no lines at offset 9: the file has 5 lines]"
+
+    def test_long_lines_stop_at_max_chars_on_a_line_boundary(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(fs, "MAX_CHARS", 100)
+        p = tmp_path / "wide.txt"
+        p.write_text("\n".join("x" * 40 for _ in range(10)), encoding="utf-8")
+        out = fs.read_file(str(p)).splitlines()
+        assert out[:-1] == [f"{n}\t" + "x" * 40 for n in (1, 2)]
+        assert out[-1] == "[not the end of the file: 8 more lines — continue with offset=3]"
+
+    def test_a_single_line_longer_than_max_chars_is_still_returned(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(fs, "MAX_CHARS", 10)
+        p = tmp_path / "one.txt"
+        p.write_text("y" * 50, encoding="utf-8")
+        assert fs.read_file(str(p)) == "1\t" + "y" * 50
 
     def test_replaces_undecodable_bytes(self, tmp_path):
         p = tmp_path / "bin.txt"

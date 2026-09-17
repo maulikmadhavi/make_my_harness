@@ -5,7 +5,7 @@ or terminal needed)."""
 import pytest
 from helpers import StubLLM, StubLog
 
-from make_harness import commands, context
+from make_harness import commands, config, history
 
 
 def _messages():
@@ -81,43 +81,47 @@ def test_unknown_command_lists_every_registered_command_sorted(sandboxed_registr
     assert output.endswith("available: /clear, /compact, /exit, /zebra")
 
 
+@pytest.fixture
+def small_window(monkeypatch):
+    """A 1000-token window, so a few kilobytes of history is old enough to
+    compact while staying under the automatic threshold."""
+    monkeypatch.setattr(config, "CONTEXT_WINDOW", 1000)
+
+
 def _long_conversation():
-    """A big tool result followed by enough turns to push it out of
-    compaction's protected recent window (the last 8 messages)."""
-    messages = [
-        {"role": "system", "content": "sys prompt + memory/skills index"},
-        {"role": "assistant", "content": None, "tool_calls": [
-            {"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{}"}},
-        ]},
-        {"role": "tool", "tool_call_id": "c1", "content": "x" * 5000},
-    ]
-    messages += [{"role": "user" if i % 2 == 0 else "assistant", "content": f"turn {i}"} for i in range(10)]
+    """Turns of ~400 chars each: more than the ~350-token tail compaction
+    keeps, so the oldest turns get summarized."""
+    messages = [{"role": "system", "content": "sys prompt + memory/skills index"}]
+    for i in range(6):
+        messages += [
+            {"role": "user", "content": f"turn {i} " + "q" * 400},
+            {"role": "assistant", "content": f"answer {i} " + "a" * 400},
+        ]
     return messages
 
 
-def test_compact_runs_even_when_under_the_token_budget(monkeypatch):
-    monkeypatch.setattr(context, "TOKEN_BUDGET", 10**9)  # automatic compaction would never fire
+def test_compact_summarizes_the_older_turns(small_window):
     messages = _long_conversation()
     log = StubLog()
     new_messages, output = commands.run("/compact", messages, log, StubLLM())
     assert new_messages[0] == messages[0]
     assert "SUMMARY OF OLDER CONVERSATION" in new_messages[1]["content"]
-    assert new_messages[2:] == messages[-8:]  # recent window kept verbatim
+    assert new_messages[2:] == messages[-len(new_messages[2:]):]  # recent tail kept verbatim
     assert output.startswith("Compacted: ~")
-    assert context.estimate_tokens(new_messages) < context.estimate_tokens(messages)
+    assert history.estimate(new_messages) < history.estimate(messages)
     assert log.kinds() == ["compaction", "command"]
 
 
-def test_compact_failure_leaves_the_conversation_untouched():
+def test_compact_failure_leaves_the_conversation_untouched(small_window):
     class FailingLLM:
         def complete(self, messages, tools=None):
-            raise RuntimeError("LLM backend error 400: context size exceeded")
+            raise RuntimeError("context size exceeded")
 
     messages = _long_conversation()
     log = StubLog()
     new_messages, output = commands.run("/compact", messages, log, FailingLLM())
     assert new_messages is messages
-    assert messages == _long_conversation()  # step 1 stubbed a copy, not these
+    assert messages == _long_conversation()
     assert output.startswith("Compaction failed, conversation unchanged: RuntimeError")
     assert log.kinds() == ["command"]
 
@@ -127,15 +131,15 @@ def test_compact_on_a_short_conversation_needs_no_llm():
     # Nothing is old enough to summarize, so llm=None must never be called.
     new_messages, output = commands.run("/compact", messages, StubLog())
     assert new_messages is messages
-    assert output.startswith("Nothing to compact")
+    assert output.startswith("Nothing old enough to compact yet")
 
 
-def test_compact_keeps_the_original_when_the_summary_is_no_smaller():
+def test_compact_reports_a_summary_that_came_out_no_smaller(small_window):
     class VerboseLLM(StubLLM):
         def complete(self, messages, tools=None):
-            return {**super().complete(messages, tools), "content": "y" * 20_000}
+            return {**super().complete(messages, tools), "content": "y" * 50_000}
 
     messages = _long_conversation()
     new_messages, output = commands.run("/compact", messages, StubLog(), VerboseLLM())
     assert new_messages is messages
-    assert output.startswith("Nothing to compact")
+    assert output.startswith("The summary came out no smaller")
