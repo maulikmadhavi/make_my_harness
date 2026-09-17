@@ -1,7 +1,8 @@
 """Tests for the file, shell and truncation toolsets.
 
-fs: read_file (numbered, capped) and write_file (creates parents,
-overwrites). shell: run_command's exit codes, stderr and timeout guard.
+fs: read_file (numbered, capped), write_file (creates parents,
+overwrites) and str_replace (exact, unique-match edits that keep the
+file's line endings). shell: run_command's exit codes, stderr and timeout guard.
 truncate: head+tail capping — the old behavior kept only the first N
 chars, dropping exactly the part of build output that matters most, the
 error at the end.
@@ -61,6 +62,65 @@ class TestWriteFile:
         p = tmp_path / "u.txt"
         fs.write_file(str(p), "naïve — 日本語")
         assert fs.read_file(str(p)) == "1\tnaïve — 日本語"
+
+
+class TestStrReplace:
+    @pytest.fixture
+    def src(self, tmp_path):
+        p = tmp_path / "src.py"
+        p.write_bytes(b"def a():\n    return 1\n\ndef b():\n    return 1\n")
+        return p
+
+    def test_replaces_a_unique_match(self, src):
+        out = fs.str_replace(str(src), "def a():\n    return 1", "def a():\n    return 2")
+        assert out == f"Replaced 1 match in {src}"
+        assert src.read_bytes() == b"def a():\n    return 2\n\ndef b():\n    return 1\n"
+
+    def test_ambiguous_match_is_refused_and_the_file_is_untouched(self, src):
+        before = src.read_bytes()
+        out = fs.str_replace(str(src), "return 1", "return 2")
+        assert out == (
+            f"Error: old_str matches 2 times in {src}. Include surrounding lines "
+            "to make it unique, or set allow_multi_edit to replace every match."
+        )
+        assert src.read_bytes() == before
+
+    def test_allow_multi_edit_replaces_every_match(self, src):
+        out = fs.str_replace(str(src), "return 1", "return 2", allow_multi_edit=True)
+        assert out == f"Replaced 2 matches in {src}"
+        assert src.read_bytes().count(b"return 2") == 2
+
+    def test_missing_text_is_reported(self, src):
+        assert fs.str_replace(str(src), "return 3", "x").startswith(f"Error: old_str was not found in {src}")
+
+    def test_empty_old_str_is_refused(self, src):
+        # "".count() matches between every character; replacing it would
+        # splice new_str all through the file.
+        assert fs.str_replace(str(src), "", "x").startswith("Error: old_str is empty")
+
+    def test_lf_file_stays_lf(self, src):
+        # On Windows a text-mode write would turn every \n into \r\n.
+        fs.str_replace(str(src), "def b", "def c")
+        assert b"\r\n" not in src.read_bytes()
+
+    def test_crlf_file_is_matched_and_kept_crlf(self, tmp_path):
+        p = tmp_path / "win.txt"
+        p.write_bytes(b"one\r\ntwo\r\nthree\r\n")
+        # The model copies text from read_file, which shows plain \n endings.
+        assert fs.str_replace(str(p), "one\ntwo", "uno\ndos") == f"Replaced 1 match in {p}"
+        assert p.read_bytes() == b"uno\r\ndos\r\nthree\r\n"
+
+    def test_round_trips_unicode(self, tmp_path):
+        p = tmp_path / "u.txt"
+        p.write_bytes("naïve — 日本語\n".encode("utf-8"))
+        fs.str_replace(str(p), "日本語", "español")
+        assert p.read_bytes().decode("utf-8") == "naïve — español\n"
+
+    def test_schema_makes_allow_multi_edit_an_optional_boolean(self):
+        schema = next(s for s in registry.schemas() if s["function"]["name"] == "str_replace")
+        params = schema["function"]["parameters"]
+        assert params["properties"]["allow_multi_edit"] == {"type": "boolean"}
+        assert params["required"] == ["path", "old_str", "new_str"]
 
 
 def _py(code):

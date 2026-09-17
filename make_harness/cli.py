@@ -39,6 +39,8 @@ SYSTEM_PROMPT = (
     f"machine ({platform.system()}, working directory: {os.getcwd()}). "
     "Use shell commands appropriate for this OS. "
     "Use your tools to read/write files and run commands when the task needs it. "
+    "Edit existing files with str_replace; use write_file only to create a file or "
+    "replace all of it. "
     "If a tool returns an error, report it to the user honestly — never invent a "
     "result you did not get from a tool. Keep answers concise."
 )

@@ -626,8 +626,27 @@ Stages 20–23 were the full-screen TUI, since removed, so Part 2 starts at 24.
   history file location). From the repo root, `skills_index()` lists
   `commit-messages` from its new path.
 
-### [ ] Stage 26 — `str_replace` edit tool
-### [ ] Stage 26 — `str_replace` edit tool
+### [x] Stage 26 — `str_replace` edit tool
+- `toolsets/fs.py`: `str_replace(path, old_str, new_str,
+  allow_multi_edit=False)`. Exact text only: no match, or more than one
+  match without `allow_multi_edit`, comes back as an error result and
+  leaves the file untouched. An empty `old_str` is refused, since
+  `"".count()` matches between every character.
+- Line endings: the file is read and written with `newline=""`, and for
+  a CRLF file `old_str` / `new_str` are converted to CRLF before
+  matching. The model copies text from `read_file`, which shows `\n`, so
+  a CRLF file still matches, and a text-mode write on Windows can't turn
+  an LF file into CRLF.
+- Permission: not auto-allowed; it asks like `write_file` until Stage 32
+  gates writes by path. The system prompt now says to edit with
+  `str_replace` and keep `write_file` for new files or full rewrites.
+- Verified: 220 tests pass (9 new, including CRLF and LF round-trips
+  checked byte for byte, and the generated schema's optional boolean).
+  Live smoke (LM Studio, `qwen/qwen3-4b`) in a scratch directory: asked
+  to change a port in a CRLF `settings.ini`, the model called
+  `str_replace`, the prompt was answered `yes`, and a hex dump showed the
+  new value with every line still ending `0D 0A`.
+
 ### [ ] Stage 27 — Context management: cap/spill, strip, fit, usage-triggered compaction
 ### [ ] Stage 28 — Per-turn `<env>` block: time, git branch, changed files
 ### [ ] Stage 29 — `write_todos` planning tool
