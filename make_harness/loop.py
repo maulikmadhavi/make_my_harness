@@ -8,6 +8,7 @@ and a one-line trace of each tool call is printed for the REPL.
 import json
 
 from make_harness import history
+from make_harness.context import with_reminder
 from make_harness.ui import dim, yellow
 
 
@@ -46,14 +47,18 @@ def _usage_line(usage):
     return "  tokens: " + " · ".join(parts) if parts else None
 
 
-def run_turn(llm, registry, policy, log, messages, max_steps=15):
+def run_turn(llm, registry, policy, log, messages, max_steps=15, reminder=None):
+    """`reminder`, when given, is called before every request and returns
+    the block context.with_reminder puts at the end of what is sent — it is
+    never added to `messages` itself."""
     last_executed = None  # (name, canonical args) of the last call actually run
     for step in range(max_steps):
         if dropped := history.fit(messages):
             print(yellow(f"  dropped {dropped} old tool result(s) to fit the context window"))
             log.event("context_fit", step=step, dropped=dropped)
-        log.event("llm_request", step=step, messages=messages)
-        resp = llm.complete(messages, tools=registry.schemas() or None)
+        request = with_reminder(messages, reminder()) if reminder else messages
+        log.event("llm_request", step=step, messages=request)
+        resp = llm.complete(request, tools=registry.schemas() or None)
         log.event("llm_response", step=step, raw=resp["raw"])
         if line := _usage_line(resp.get("usage") or {}):
             print(dim(line))

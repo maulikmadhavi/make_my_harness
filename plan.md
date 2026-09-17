@@ -701,8 +701,40 @@ with two modules and a setting for the real window size.
   output was capped and spilled, and `fit` dropped old results mid-turn.
   No `make-harness-*.txt` files were left in the temp directory.
 
-### [ ] Stage 28 — Per-turn `<env>` block: time, git branch, changed files
-### [ ] Stage 28 — Per-turn `<env>` block: time, git branch, changed files
+### [x] Stage 28 — Per-turn `<env>` block: time, git branch, changed files
+- `make_harness/context.py` (the name is free again after Stage 27):
+  - `reminder(branch, changed)` builds an `<env>` block (date, git
+    branch), plus a `<system-reminder>` listing files that changed since
+    the agent's last turn.
+  - `with_reminder(messages, block)` returns a copy for sending. The
+    block is merged into a trailing user message, which keeps roles
+    alternating for chat templates that require it, or appended as its
+    own user message after tool results. It is never stored in the
+    transcript, so it can't disturb the cached prefix, and the date stays
+    current for every request.
+- `ChangeTracker`: `snapshot()` when a turn ends, `changes()` when the
+  next begins. The agent therefore hears about edits made between turns
+  (by the user, an editor, a formatter), never about its own. It reads
+  `git status --porcelain=v1 -z` with repo-root-relative paths, compares
+  size + mtime rather than hashing (it runs every turn, on files of any
+  size), and reports files that dropped out of the status as "committed
+  or reverted". Outside a repository everything degrades to an empty
+  state and `(not a git repository)`.
+- `run_turn(..., reminder=None)` calls it before every request, and the
+  `llm_request` log event now records what was actually sent. The REPL
+  computes the branch and the changed files once per turn and prints
+  `changed since the last turn: …`. The system prompt tells the model the
+  block is harness context, not the user.
+- Verified: 259 tests pass (12 new; `ChangeTracker` runs against a real
+  temporary git repository, including a second edit to an already-dirty
+  file, a `git checkout` revert, and running from a subdirectory). Live
+  (LM Studio, `qwen/qwen3-4b`), driven over pipes with a file edit
+  between turns: in turn 1 the agent created `notes.txt` and it was not
+  reported; `config.txt`, edited between turns, was. The model answered
+  with that file and the branch `feature/env-block`, and the log showed
+  the block merged into the user message at step 0 and appended after
+  the tool result at step 1.
+
 ### [ ] Stage 29 — `write_todos` planning tool
 ### [ ] Stage 30 — Sessions: saved transcripts, `--resume`, `/sessions`, `/rewind`
 ### [ ] Stage 31 — `task` exploration subagent

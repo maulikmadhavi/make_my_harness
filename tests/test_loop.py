@@ -369,6 +369,27 @@ def test_usage_line(usage, expected):
     assert (line.strip() if line else None) == expected
 
 
+def test_reminder_is_sent_with_every_request_but_never_stored():
+    seen = []
+
+    class RecordingLLM(ScriptedLLM):
+        def complete(self, messages, tools=None):
+            seen.append([dict(m) for m in messages])
+            return super().complete(messages, tools)
+
+    llm = RecordingLLM([{"tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]}, {"content": "done"}])
+    reg, _ = _make_registry()
+    messages = [{"role": "user", "content": "go"}]
+    log = StubLog()
+    blocks = iter(["<env>1</env>", "<env>2</env>"])
+    run_turn(llm, reg, AllowAll(), log, messages, reminder=lambda: next(blocks))
+    assert seen[0][-1] == {"role": "user", "content": "go\n\n<env>1</env>"}
+    assert seen[1][-1] == {"role": "user", "content": "<env>2</env>"}  # rebuilt, after the tool result
+    assert not any("<env>" in (m.get("content") or "") for m in messages)
+    logged = [f["messages"][-1]["content"] for k, f in log.events if k == "llm_request"]
+    assert logged == ["go\n\n<env>1</env>", "<env>2</env>"]  # the log shows what was really sent
+
+
 def test_assistant_tool_call_message_keeps_both_content_and_calls():
     llm = ScriptedLLM([
         {"content": "let me look", "tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]},

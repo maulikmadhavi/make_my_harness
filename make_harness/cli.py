@@ -21,7 +21,7 @@ import make_harness.toolsets.shell  # noqa: F401
 import make_harness.toolsets.skills  # noqa: F401
 import make_harness.toolsets.web  # noqa: F401
 from make_harness import __version__
-from make_harness import commands, history
+from make_harness import commands, context, history
 from make_harness.compact import needed as compaction_needed
 from make_harness.llm import LLMClient
 from make_harness.mentions import expand_mentions
@@ -45,6 +45,8 @@ SYSTEM_PROMPT = (
     "the cut: page through it with read_file offset/limit instead of running the "
     "tool again. That file is deleted when your turn ends, and tool results from "
     "earlier turns are shortened — run the tool again if you need one in full. "
+    "The harness adds an <env> block (date, git branch, and files changed since your "
+    "last turn) to the end of each request; it is context, not a message from the user. "
     "If a tool returns an error, report it to the user honestly — never invent a "
     "result you did not get from a tool. Keep answers concise."
 )
@@ -67,6 +69,7 @@ def repl():
         sys.exit(f"error: {e}")
     log = RunLog()
     policy = Policy()
+    tracker = context.ChangeTracker()
     system = SYSTEM_PROMPT
     index = memory_index()
     if index:
@@ -121,8 +124,15 @@ def repl():
             console.print(f"[dim]  @ attached {escape(mention)}[/dim]")
         log.event("user_message", content=user, attachments=attached)
         messages.append({"role": "user", "content": expanded})
+        changed = tracker.changes()
+        if changed:
+            console.print(f"[dim]  changed since the last turn: {escape(', '.join(changed))}[/dim]")
+        branch = context.branch()  # once per turn; the block is rebuilt for every request
         try:
-            answer = run_turn(llm, registry, policy, log, messages)
+            answer = run_turn(
+                llm, registry, policy, log, messages,
+                reminder=lambda: context.reminder(branch, changed),
+            )
             console.print()
             # Text() keeps the answer literal — brackets in code like
             # list[int] must not be parsed as rich markup.
@@ -137,6 +147,7 @@ def repl():
             # it produced (history.py).
             history.sweep()
             history.strip(messages)
+            tracker.snapshot()
         if compaction_needed(llm.last_usage, messages):
             messages, output = commands.compact(messages, llm, log)
             console.print(f"[dim]{escape(output)}[/dim]")
