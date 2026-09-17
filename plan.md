@@ -914,7 +914,26 @@ with two modules and a setting for the real window size.
   the 29 `test_toolsets.py` tests, with `run_command` actually sandboxed.
   The unpacked `bwrap` was deleted afterwards.
 
-### [ ] Stage 34 — Docs: README, architecture.md
+### [x] Stage 34 — Docs: README, architecture.md
+- `README.md` rewritten against the code as it now stands:
+  - configuration (`BASE_URL` / `MODEL` / `API_KEY`, `CONTEXT_WINDOW`,
+    the `./.env` → `~/.agents/env` lookup, and the rename error for old
+    settings);
+  - the tool table with each tool's gate;
+  - the shell command rules and the Linux sandbox;
+  - `/rewind`, `/sessions`, `--resume`;
+  - how a turn works, now including fit, the reminder block, cap/spill,
+    strip and usage-triggered compaction;
+  - every file the harness writes;
+  - the current test modules, and smoke checks for each new stage.
+- `doc/architecture.md`: the call graph and component table now include
+  `config`, `history`, `compact`, `context`, `session`, `subagent` and
+  `sandbox`, and drop `llm_providers`. The state-on-disk table covers the
+  `~/.agents/` files, and the known gaps now include "no sandbox off
+  Linux".
+- Stage 10's "subagents for context isolation, session resume from a
+  JSONL log — still v2+" is now built (Stages 30 and 31).
+
 
 ## Deliberately NOT built
 
