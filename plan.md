@@ -882,7 +882,38 @@ with two modules and a setting for the real window size.
   `old.log` still exists, and the model told the user to run the delete
   themselves rather than trying another way.
 
-### [ ] Stage 33 — bubblewrap sandbox for shell commands on Linux
+### [x] Stage 33 — bubblewrap sandbox for shell commands on Linux
+- `make_harness/sandbox.py`: on Linux with `bwrap` installed,
+  `run_command` runs inside bubblewrap:
+  - the whole filesystem read-only; the project directory bound
+    read-write; a throwaway tmpfs `/tmp`;
+  - no network (`--unshare-net`);
+  - `--new-session`, so a command can't push keystrokes into the user's
+    terminal, and `--die-with-parent`.
+  Everywhere else `run()` is the plain `shell=True` call it was.
+- Differences from neuralcode:
+  - No macOS seatbelt profile: pixi here targets `win-64` and `linux-64`
+    only, so it would be code nothing runs.
+  - A tmpfs `/tmp`, bound *before* the project, so a project that lives
+    under `/tmp` is still writable. With a read-only `/tmp`, tools that
+    need scratch space (pytest's `tmp_path`) fail. The agent pages spilled
+    output with `read_file`, which runs outside the sandbox, so it doesn't
+    need `/tmp` visible inside.
+- Windows has no sandbox a user can start without admin rights, so there
+  the Stage 32 rules are the only fence. The banner prints `sandbox:
+  bubblewrap|none`, and only a sandboxed session tells the model about
+  the limits in its system prompt.
+- Verified on Windows: 360 passed, 4 skipped. The skipped tests are the
+  real-bubblewrap ones; argv construction and the platform check are
+  tested everywhere.
+- Verified on Linux (WSL2 Ubuntu 22.04), without installing anything:
+  `apt-get download bubblewrap` unpacked into `/tmp`, put on `PATH`, and
+  pytest run through `pixi exec`. All 11 sandbox tests passed — a write
+  inside the project, a refused write to `$HOME`, a `/tmp` write that
+  doesn't outlive the command, a failed network connection — and so did
+  the 29 `test_toolsets.py` tests, with `run_command` actually sandboxed.
+  The unpacked `bwrap` was deleted afterwards.
+
 ### [ ] Stage 34 — Docs: README, architecture.md
 
 ## Deliberately NOT built

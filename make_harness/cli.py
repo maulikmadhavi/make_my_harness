@@ -23,7 +23,7 @@ import make_harness.toolsets.todos  # noqa: F401
 import make_harness.toolsets.web  # noqa: F401
 from make_harness import subagent
 from make_harness import __version__
-from make_harness import commands, context, history
+from make_harness import commands, context, history, sandbox
 from make_harness.compact import needed as compaction_needed
 from make_harness.llm import LLMClient
 from make_harness.mentions import expand_mentions
@@ -84,6 +84,11 @@ def repl(resume=False):
     subagent.configure(llm, policy, log)
     tracker = context.ChangeTracker()
     system = SYSTEM_PROMPT
+    if sandbox.available():
+        system += (
+            " Shell commands run in a sandbox: they can read anything, but write only inside "
+            "the working directory, and have no network access."
+        )
     index = memory_index()
     if index:
         system += "\n\nPersistent memory index (use read_memory for details):\n" + index
@@ -105,6 +110,7 @@ def repl(resume=False):
     )
     console.print(f"[dim]log:   {log.path}[/dim]")
     console.print(f"[dim]tools: {tool_names}[/dim]")
+    console.print(f"[dim]sandbox: {sandbox.name()}[/dim]")
     console.print()
     console.print("[dim]Shortcuts:[/dim]")
     console.print("  [cyan]@path[/cyan]      Attach files/folders")
