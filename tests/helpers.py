@@ -1,5 +1,5 @@
-"""Stubs shared by several test modules: an event-recording log and a
-stand-in for a requests.Response."""
+"""Stubs shared by several test modules: an event-recording log, a
+network-free LLM, and a stand-in for a requests.Response."""
 
 
 class StubLog:
@@ -13,6 +13,18 @@ class StubLog:
 
     def kinds(self):
         return [kind for kind, _ in self.events]
+
+
+class StubLLM:
+    """Stands in for LLMClient during a summarize step — no network."""
+
+    def complete(self, messages, tools=None):
+        return {
+            "content": "SUMMARY OF OLDER CONVERSATION",
+            "tool_calls": [],
+            "usage": {},
+            "raw": {},
+        }
 
 
 class FakeResponse:
