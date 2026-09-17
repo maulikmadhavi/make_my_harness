@@ -107,6 +107,14 @@ def test_explicit_parameters_replace_the_generated_schema():
     assert count(["x"]) == "1"  # the decorator still hands back the function
 
 
+def test_without_leaves_out_the_named_tools_and_the_original_intact(reg):
+    subset = reg.without({"boom"})
+    assert [s["function"]["name"] for s in subset.schemas()] == ["greet"]
+    assert subset.execute("boom", {}) == "Error: unknown tool 'boom'"
+    assert subset.execute("greet", {"name": "x"}) == "Hello x"
+    assert [s["function"]["name"] for s in reg.schemas()] == ["greet", "boom"]
+
+
 def test_missing_docstring_gives_an_empty_description():
     reg = Registry()
 

@@ -31,8 +31,9 @@ CHOICES = [
 
 class Policy:
     # save_memory/read_memory only touch the memory/ directory; load_skill
-    # only reads skill files; write_todos only changes the in-memory plan.
-    AUTO_ALLOW = {"read_file", "web_search", "save_memory", "read_memory", "load_skill", "write_todos"}
+    # only reads skill files; write_todos only changes the in-memory plan;
+    # task only starts a subagent, whose own tool calls come through here.
+    AUTO_ALLOW = {"read_file", "web_search", "save_memory", "read_memory", "load_skill", "write_todos", "task"}
 
     def __init__(self):
         self.always_allow = set()

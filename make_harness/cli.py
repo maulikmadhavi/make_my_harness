@@ -21,6 +21,7 @@ import make_harness.toolsets.shell  # noqa: F401
 import make_harness.toolsets.skills  # noqa: F401
 import make_harness.toolsets.todos  # noqa: F401
 import make_harness.toolsets.web  # noqa: F401
+from make_harness import subagent
 from make_harness import __version__
 from make_harness import commands, context, history
 from make_harness.compact import needed as compaction_needed
@@ -48,6 +49,9 @@ SYSTEM_PROMPT = (
     "the cut: page through it with read_file offset/limit instead of running the "
     "tool again. That file is deleted when your turn ends, and tool results from "
     "earlier turns are shortened — run the tool again if you need one in full. "
+    "To learn how something in the codebase works, ask the task tool a self-contained "
+    "question: a subagent explores in its own context and returns only its findings, "
+    "which keeps yours small. It cannot see this conversation and never edits. "
     "For a task with several steps, plan it with write_todos first, keep exactly one "
     "item in_progress, and mark each item done as soon as it is finished. "
     "The harness adds an <env> block (date, git branch, your current todos, and files "
@@ -75,6 +79,7 @@ def repl(resume=False):
         sys.exit(f"error: {e}")
     log = RunLog()
     policy = Policy()
+    subagent.configure(llm, policy, log)
     tracker = context.ChangeTracker()
     system = SYSTEM_PROMPT
     index = memory_index()

@@ -809,7 +809,42 @@ with two modules and a setting for the real window size.
     with the dropped lines still above it. The test session directory was
     deleted afterwards.
 
-### [ ] Stage 31 — `task` exploration subagent
+### [x] Stage 31 — `task` exploration subagent
+- `make_harness/subagent.py`: the `task(description)` tool runs
+  `run_turn` — the same loop, no special agent class — on a new list
+  holding only its own system prompt and the question, and returns the
+  final answer. The tool output it reads never reaches the main
+  transcript. `run_turn` isn't a loop that stops on the first reply, so
+  "returns only its last message" is simply its return value.
+- Shared with the main agent: the LLM, the `Policy` instance (so
+  `always` / `deny` answers carry over and its calls prompt the same
+  way), and the run log, with every event tagged `agent: "subagent"` and
+  framed by `subagent_start` / `subagent_done`. The REPL hands these over
+  through `subagent.configure()`; outside it, `task` returns a clean
+  error.
+- Withheld, structurally: `Registry.without(names)` builds the registry
+  it is offered, minus `task` (no recursion), `write_todos` (the plan is
+  the main agent's), `write_file`, `str_replace` and `save_memory`
+  (it reads and reports).
+- Capped at 12 steps. Running out returns its last words as partial
+  findings, and a denied call comes back as a one-line explanation,
+  rather than the loop's own markers leaking through.
+- `run_turn(..., indent=)` prefixes its trace lines, so a subagent's
+  steps print nested under the `task` call. `TURN_DENIED` names the
+  denial marker. `task` is auto-allowed, since its own calls are gated.
+- Verified: 313 tests pass (9 new: a fresh two-message transcript,
+  withheld tools absent from the offered schemas, the shared gate and
+  tagged log, indentation, denial, and step exhaustion with and without
+  partial findings, plus `Registry.without`). Live (LM Studio,
+  `qwen/qwen3-4b`) in the repo root, asked where `run_turn` is defined
+  and imported: the model called `task`; the subagent started at 789
+  prompt tokens against ~1800 for the main agent, ran a `grep` through
+  the shared permission prompt with its trace indented, and returned a
+  465-char report. The log shows `subagent_start`, its tagged events,
+  and `subagent_done` nested inside the main agent's `tool_call` /
+  `tool_result`. The 4B model's final answer was vague; the mechanism is
+  what this stage verifies.
+
 ### [ ] Stage 32 — Command-level permission rules and project-path write gating
 ### [ ] Stage 33 — bubblewrap sandbox for shell commands on Linux
 ### [ ] Stage 34 — Docs: README, architecture.md

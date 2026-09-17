@@ -42,6 +42,13 @@ class Registry:
         }
         return func
 
+    def without(self, names):
+        """A registry with every tool except `names` — what a subagent is
+        offered. A tool it isn't offered is one it cannot call."""
+        subset = Registry()
+        subset._tools = {name: entry for name, entry in self._tools.items() if name not in names}
+        return subset
+
     def schemas(self):
         return [t["schema"] for t in self._tools.values()]
 
