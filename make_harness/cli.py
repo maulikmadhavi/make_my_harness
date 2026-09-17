@@ -57,6 +57,8 @@ SYSTEM_PROMPT = (
     "The harness adds an <env> block (date, git branch, your current todos, and files "
     "changed since your last turn) to the end of each request; it is context, not a "
     "message from the user. "
+    "Some shell commands are blocked outright (like rm, del, curl, git push); never "
+    "work around a block — ask the user instead. "
     "If a tool returns an error, report it to the user honestly — never invent a "
     "result you did not get from a tool. Keep answers concise."
 )

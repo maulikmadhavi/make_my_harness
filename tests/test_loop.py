@@ -8,7 +8,7 @@ role:"tool" response (the pairing rule the deny path also honors).
 import pytest
 from helpers import StubLog
 
-from make_harness.loop import DENIED_RESULT, SHORT_CIRCUIT_RESULT, _repair_args, run_turn
+from make_harness.loop import BLOCKED_RESULT, DENIED_RESULT, SHORT_CIRCUIT_RESULT, _repair_args, run_turn
 from make_harness.tools import Registry
 
 
@@ -255,6 +255,22 @@ def test_rest_of_the_batch_is_auto_denied_after_one_denial():
     assert calls == []
     assert [m["content"] for m in messages if m["role"] == "tool"] == [DENIED_RESULT, DENIED_RESULT]
     assert _pairing_ok(messages)
+
+
+def test_a_blocked_call_is_explained_and_the_turn_continues():
+    llm = ScriptedLLM([
+        {"tool_calls": [_tc("c1", "probe", '{"path": "x.py"}')]},
+        {"content": "I can't do that; please run it yourself."},
+    ])
+    reg, calls = _make_registry()
+    log = StubLog()
+    messages = [{"role": "user", "content": "go"}]
+    answer = run_turn(llm, reg, ScriptedPolicy(["block"]), log, messages)
+    assert answer == "I can't do that; please run it yourself."
+    assert calls == []
+    assert messages[2] == {"role": "tool", "tool_call_id": "c1", "content": BLOCKED_RESULT}
+    assert "turn_interrupted" not in log.kinds()
+    assert ("permission", {"step": 0, "tool": "probe", "verdict": "block"}) in log.events
 
 
 def test_max_steps_exhaustion_returns_a_stop_marker():

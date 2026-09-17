@@ -35,6 +35,11 @@ SHORT_CIRCUIT_RESULT = (
     "unchanged; adjust your arguments or approach]"
 )
 DENIED_RESULT = "Denied by user."
+BLOCKED_RESULT = (
+    "Blocked by policy: this command is never allowed here (for example rm, del, curl, "
+    "git push). Don't try a variation of it; if it is really needed, ask the user to "
+    "run it themselves."
+)
 TURN_DENIED = "[tool call denied — tell me how to proceed]"
 
 
@@ -108,6 +113,11 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15, reminder=None, 
                         result = registry.execute(name, args)
                         last_executed = signature
                         print(dim(f"{indent}  ← {len(result)} chars"))
+                    elif verdict == "block":
+                        # A rule, not the user, said no: the model gets told
+                        # why and the turn goes on.
+                        result = BLOCKED_RESULT
+                        print(yellow(f"{indent}  ← blocked by policy"))
                     else:
                         result = DENIED_RESULT
                         print(yellow(f"{indent}  ← denied"))

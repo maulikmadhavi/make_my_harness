@@ -845,7 +845,43 @@ with two modules and a setting for the real window size.
   `tool_result`. The 4B model's final answer was vague; the mechanism is
   what this stage verifies.
 
-### [ ] Stage 32 — Command-level permission rules and project-path write gating
+### [x] Stage 32 — Command-level permission rules and project-path write gating
+- `policy.py` rules decide before anyone is asked (`Policy.rule`):
+  - `run_command` is rated per command by `SHELL_RULES`, a list of
+    `(fnmatch pattern, verdict)` where the last match wins. Read-only
+    commands in both POSIX and Windows spellings (`ls`/`dir`,
+    `cat`/`type`, `grep`/`findstr`, `which`/`where`, `git
+    status/diff/log/show`, `pytest`) run without asking. `find` asks
+    again with `-delete` / `-exec`. Destructive or network commands (`rm`,
+    `del`, `rd`, `Remove-Item`, `format`, `sudo`, `chmod`, `curl`, `wget`,
+    `git push`, `git reset --hard`, `git clean`) are blocked. Everything
+    else asks. Matching is on the lowercased command, since Windows
+    commands are case-insensitive.
+  - `split_command` breaks a compound command on `&&`, `||`, `|`, `;` and
+    newlines outside quotes, so `grep "a|b"` stays whole; the strictest
+    part decides.
+  - A part containing `>`, `$`, `%` or a backtick is never allowed without
+    asking, whatever its rule says. Redirection writes files, and
+    expansion runs commands or reads variables: `echo %API_KEY%` would
+    send a secret to the model. neuralcode leans on its OS sandbox for
+    this; Windows has none.
+  - `write_file` / `str_replace` inside the launch directory run without
+    asking (resolved paths, so `../` and absolute paths are judged
+    correctly), except inside `.git`; outside the project they ask.
+- A `deny` rule makes `check()` return `block`. It is never offered to
+  the user, so `always` can't unblock it. The loop answers a blocked call
+  with `BLOCKED_RESULT` ("don't try a variation; ask the user") and lets
+  the turn continue. A *user's* denial still ends the turn, the Stage 2
+  lesson.
+- Verified: 353 tests pass (40 new, mostly the parametrized splitting
+  and rating tables, plus write paths against a temp project, blocks
+  surviving `always`, and the loop's block path). Live (LM Studio,
+  `qwen/qwen3-4b`), asked to `dir`, create `hello.txt`, then `del
+  old.log`: the log records `run_command: allow`, `write_file: allow` (an
+  absolute path inside the project, no prompt) and `run_command: block`.
+  `old.log` still exists, and the model told the user to run the delete
+  themselves rather than trying another way.
+
 ### [ ] Stage 33 — bubblewrap sandbox for shell commands on Linux
 ### [ ] Stage 34 — Docs: README, architecture.md
 
