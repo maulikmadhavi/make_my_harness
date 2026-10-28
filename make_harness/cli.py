@@ -25,7 +25,7 @@ from make_harness import subagent
 from make_harness import __version__
 from make_harness import commands, context, history, sandbox
 from make_harness.compact import needed as compaction_needed
-from make_harness.llm import LLMClient
+from make_harness.llm import LLMClient, tokens_text
 from make_harness.mentions import expand_mentions
 from make_harness.toolsets.memory import memory_index
 from make_harness.toolsets import todos
@@ -118,6 +118,7 @@ def repl(resume=False):
     console.print("  [cyan]/compact[/cyan]   Summarize history to free context")
     console.print("  [cyan]/rewind[/cyan]    Go back to before an earlier message")
     console.print("  [cyan]/sessions[/cyan]  Open a saved chat")
+    console.print("  [cyan]/tokens[/cyan]    Token totals for this session")
     console.print("  [cyan]/exit[/cyan]      Quit (exit and quit work too)")
     if resume:
         saved = ctx.session.list()
@@ -181,6 +182,8 @@ def repl(resume=False):
             history.sweep()
             history.strip(messages)
             tracker.snapshot()
+        if llm.requests:
+            console.print(f"[dim]  session: {tokens_text(llm.totals)}[/dim]")
         if compaction_needed(llm.last_usage, messages):
             messages, output = commands.compact(messages, ctx)
             console.print(f"[dim]{escape(output)}[/dim]")

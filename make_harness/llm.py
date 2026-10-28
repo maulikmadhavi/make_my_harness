@@ -1,7 +1,7 @@
 """Adapter over the OpenAI SDK, pointed at any OpenAI-compatible endpoint.
 
 The rest of the harness only ever calls LLMClient.complete(messages, tools)
-and gets back a plain dict: {content, reasoning, tool_calls, usage, raw}.
+and gets back a plain dict: {content, reasoning, tool_calls, usage, tokens, raw}.
 Which backend answers — OpenAI, Groq, OpenRouter, or a local vLLM / Ollama /
 LM Studio server — is decided by BASE_URL, API_KEY and MODEL alone
 (see config.py).
@@ -12,7 +12,7 @@ import re
 
 from openai import BadRequestError, OpenAI
 
-from make_harness import config
+from make_harness import config, history
 
 # Local servers ignore the key, but the SDK refuses to build a client without one.
 KEYLESS = "not-needed"
@@ -59,6 +59,25 @@ def _usage(usage):
     }
 
 
+def _split(usage, messages, tools):
+    """One request's tokens as {fixed, input, output, total}, or None when
+    the server reported no counts. The server counts the prompt only as a
+    whole, so `fixed` — the system prompt and tool schemas, sent unchanged
+    with every request — is estimated, and `input` is the rest of the
+    prompt: the conversation itself."""
+    prompt, output = usage.get("prompt_tokens"), usage.get("completion_tokens")
+    if prompt is None or output is None:
+        return None
+    unchanging = [m for m in messages if m["role"] == "system"] + (tools or [])
+    fixed = min(history.estimate(unchanging), prompt)
+    return {"fixed": fixed, "input": prompt - fixed, "output": output, "total": prompt + output}
+
+
+def tokens_text(tokens):
+    """'~300 fixed + 900 input + 30 output = 1230 total' — fixed is estimated."""
+    return "~{fixed} fixed + {input} input + {output} output = {total} total".format(**tokens)
+
+
 class LLMClient:
     def __init__(self, client=None, model=None):
         """Built from the environment by default; tests pass both a client
@@ -70,6 +89,8 @@ class LLMClient:
         self.client = client
         self.model = model
         self.last_usage = {}  # of the latest request, for compact.needed()
+        self.totals = dict.fromkeys(("fixed", "input", "output", "total"), 0)  # every request so far
+        self.requests = 0  # requests added into totals
 
     def complete(self, messages, tools=None, retries=2):
         # tool_use_failed: first try to salvage the intended call from the
@@ -101,17 +122,24 @@ class LLMClient:
                         "reasoning": None,
                         "tool_calls": [call],
                         "usage": {},
+                        "tokens": None,
                         "raw": {"salvaged": True, "error": e.body},
                     }
                 if attempt == len(temperatures) - 1:
                     raise
         message = response.choices[0].message.model_dump(exclude_none=True)
         self.last_usage = _usage(response.usage)
+        tokens = _split(self.last_usage, messages, tools)
+        if tokens:
+            self.requests += 1
+            for key in self.totals:
+                self.totals[key] += tokens[key]
         return {
             "content": message.get("content"),
             # Groq names it reasoning; vLLM and LM Studio reasoning_content.
             "reasoning": message.get("reasoning") or message.get("reasoning_content"),
             "tool_calls": message.get("tool_calls") or [],
             "usage": self.last_usage,
+            "tokens": tokens,
             "raw": response.model_dump(exclude_none=True),
         }

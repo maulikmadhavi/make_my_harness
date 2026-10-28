@@ -14,7 +14,7 @@ flowchart TD
     entry["main.py · __main__.py"] --> cli["cli.py<br/>REPL · --resume"]
     cli --> config["config.py<br/>env file · settings"]
     cli --> mentions["mentions.py<br/>@path attachments"]
-    cli --> commands["commands.py<br/>/clear · /compact · /rewind · /sessions · /exit"]
+    cli --> commands["commands.py<br/>/clear · /compact · /rewind · /sessions · /tokens · /exit"]
     cli --> context["context.py<br/>&lt;env&gt; block · ChangeTracker"]
     cli --> session["session.py<br/>saved chats"]
     commands --> session
@@ -47,14 +47,14 @@ which passes the rendered plan into each request's block.
 |---|---|---|
 | `cli.py` | Builds the system prompt (memory and skills indexes, sandbox note), wires the pieces together, runs the REPL; saves, sweeps and strips after each turn, then compacts when needed | `main.py`, `python -m make_harness` |
 | `config.py` | Loads `./.env` or `~/.agents/env`; `backend()` returns `BASE_URL` / `API_KEY` / `MODEL`; `CONTEXT_WINDOW`, `COMPACT_AT`, `COMPACT_TO` | imported first by `cli.py`; `llm.py`, `history.py`, `compact.py` |
-| `llm.py` | `LLMClient.complete` over the openai SDK: plain-dict result, normalized usage (also kept as `last_usage`), Groq `tool_use_failed` salvage, temperature retry | `loop.py`, `compact.py` |
+| `llm.py` | `LLMClient.complete` over the openai SDK: plain-dict result, normalized usage (also kept as `last_usage`), a fixed + input + output = total split added into `totals`, Groq `tool_use_failed` salvage, temperature retry | `cli.py`, `loop.py`, `compact.py`, `commands.py` |
 | `loop.py` | `run_turn`: up to 15 requests; fits the context, adds the reminder block, repairs bad tool arguments, short-circuits verbatim repeats, stops on a user denial, reports a rule's block | `cli.py`, `subagent.py` |
 | `tools.py` | `@tool` turns a function into a JSON schema (or takes `parameters=`); `registry.execute` wraps exceptions as text; `without()` builds a subagent's toolset | toolsets register into it, `loop.py` executes |
 | `toolsets/` | `read_file`, `write_file`, `str_replace`, `run_command`, `web_search`, `http_request`, `save_memory`, `read_memory`, `load_skill`, `write_todos` | the model, through the registry |
 | `subagent.py` | `task`: `run_turn` on a fresh transcript with write tools withheld; returns only the report | the model, through the registry |
 | `policy.py` | `SHELL_RULES` per command and project-path gating for writes decide allow / ask / block; the rest asks yes / no / always / deny through its `_ask` seam | `loop.py` |
 | `sandbox.py` | Wraps shell commands in bubblewrap on Linux: read-only filesystem except the project and `/tmp`, no network | `toolsets/shell.py`, `cli.py` |
-| `history.py` | `cap` trims a fresh result and spills the whole to a temp file; `sweep`, `strip` after a turn; `fit` before a request; never touches the frozen prefix | `toolsets/`, `loop.py`, `cli.py`, `compact.py` |
+| `history.py` | `cap` trims a fresh result and spills the whole to a temp file; `sweep`, `strip` after a turn; `fit` before a request; never touches the frozen prefix | `toolsets/`, `llm.py`, `loop.py`, `cli.py`, `compact.py` |
 | `compact.py` | `needed` (server `prompt_tokens` vs the window) and `compact`: system + `<summary>` handoff note + recent tail | `cli.py`, `commands.py` |
 | `context.py` | `reminder` builds the `<env>` / `<todos>` / `<system-reminder>` block, `with_reminder` attaches it to a request copy; `ChangeTracker` diffs `git status` between turns | `cli.py`, `loop.py` |
 | `session.py` | `Session`: append-only JSONL per chat under `~/.agents/sessions/<project>/`, with `rewind_to` / `replace` entries; `list`, `open`, `preview` | `cli.py`, `commands.py` |

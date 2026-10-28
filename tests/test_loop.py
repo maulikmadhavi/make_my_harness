@@ -369,19 +369,25 @@ def test_oversized_history_is_fit_before_the_request(monkeypatch):
     assert ("context_fit", {"step": 0, "dropped": 1}) in log.events
 
 
+_TOKENS = {"fixed": 300, "input": 900, "output": 30, "total": 1230}
+
+
 @pytest.mark.parametrize(
-    "usage,expected",
+    "resp,expected",
     [
-        ({"prompt_tokens": 1200, "completion_tokens": 30, "cached_tokens": 800}, "tokens: 1200 in · 30 out · 800 cached"),
-        ({"prompt_tokens": 1200, "completion_tokens": 30, "cached_tokens": None}, "tokens: 1200 in · 30 out"),
-        ({}, None),
+        ({"tokens": _TOKENS, "usage": {"cached_tokens": 800}},
+         "tokens: ~300 fixed + 900 input + 30 output = 1230 total · 800 cached"),
+        ({"tokens": _TOKENS, "usage": {"cached_tokens": None}},
+         "tokens: ~300 fixed + 900 input + 30 output = 1230 total"),
+        ({"tokens": None, "usage": {}}, None),
+        ({"usage": {}}, None),
     ],
-    ids=["with-cache", "no-cache-count", "no-usage"],
+    ids=["with-cache", "no-cache-count", "no-usage", "stub-without-tokens"],
 )
-def test_usage_line(usage, expected):
+def test_usage_line(resp, expected):
     from make_harness.loop import _usage_line
 
-    line = _usage_line(usage)
+    line = _usage_line(resp)
     assert (line.strip() if line else None) == expected
 
 

@@ -6,7 +6,7 @@ called as func(messages, ctx) and returns (new_messages, output), where
 new_messages is None when the command ends the REPL (/exit).
 
 ctx bundles what commands reach for beyond the message list: the log, the
-LLM (/compact), the saved session (/sessions, /rewind, and every command
+LLM (/compact, /tokens), the saved session (/sessions, /rewind, and every command
 that changes history has to record it there), a chooser for picking from a
 list, and the current system prompt.
 """
@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from make_harness import compact as compaction
 from make_harness import history
+from make_harness.llm import tokens_text
 from make_harness.session import preview, title
 from make_harness.toolsets import todos
 
@@ -96,6 +97,15 @@ def compact(messages, ctx):
     if ctx.session:
         ctx.session.replace(new_messages)
     return new_messages, f"Compacted: ~{before} -> ~{history.estimate(new_messages)} tokens."
+
+
+@command
+def tokens(messages, ctx):
+    """Tokens spent since the REPL started, over every request — the
+    agent's, subagents' and compaction's — as fixed + input + output."""
+    if not getattr(ctx.llm, "requests", 0):
+        return messages, "No token counts yet."
+    return messages, f"Session: {tokens_text(ctx.llm.totals)} over {ctx.llm.requests} requests."
 
 
 @command

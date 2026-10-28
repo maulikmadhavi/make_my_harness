@@ -192,6 +192,7 @@ Shortcuts:
   /compact   Summarize history to free context
   /rewind    Go back to before an earlier message
   /sessions  Open a saved chat
+  /tokens    Token totals for this session
   /exit      Quit (exit and quit work too)
 
 you >
@@ -199,8 +200,9 @@ you >
 
 - **Ask for things.** The agent answers, calling tools as needed. Each call
   is traced as `→ tool(args)` / `← N chars`, each request as
-  `tokens: N in · N out · N cached`, and the final answer appears in a green
-  `agent` panel. A subagent's steps are indented under its `task` call.
+  `tokens: ~N fixed + N input + N output = N total · N cached`, and the final
+  answer appears in a green `agent` panel, followed by the running
+  `session:` total. A subagent's steps are indented under its `task` call.
 - **`@path` mentions** — `Explain @make_harness/llm.py` attaches the file's
   content to your message (folders attach a listing), so the model reads it
   without spending a `read_file` call. Only existing paths expand;
@@ -228,6 +230,13 @@ you >
   everything after it.
 - **`/sessions`** lists this project's other saved chats and opens the one
   you pick. **`make-harness --resume`** opens the most recent one at startup.
+- **`/tokens`** shows the tokens spent since the REPL started, over every
+  request (the agent's, subagents' and compaction's), as
+  `fixed + input + output = total`. Input and output are the server's own
+  counts. The server reports the prompt only as a whole, so `fixed`, the
+  system prompt and tool schemas sent with every request, is estimated at
+  ~4 characters per token (hence the `~`), and `input` is the rest of the
+  prompt.
 - An unknown `/command` prints the list of available commands.
 - **`/exit`**, **`exit`**, **`quit`**, Ctrl+C or Ctrl+D ends the session.
 
@@ -317,7 +326,7 @@ richer arguments pass the schema yourself: `@tool(parameters={...})`, as
 
 ```python
 @command
-def tokens(messages, ctx):
+def size(messages, ctx):
     """Show the estimated context size."""
     return messages, f"~{history.estimate(messages)} tokens"
 ```

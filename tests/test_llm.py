@@ -14,7 +14,7 @@ import httpx2
 import pytest
 from openai import OpenAI
 
-from make_harness import config
+from make_harness import config, history
 from make_harness.llm import KEYLESS, LLMClient, _salvage_tool_call
 
 HI = [{"role": "user", "content": "hi"}]
@@ -165,6 +165,42 @@ class TestCompleteResult:
         assert Server(_ok(usage=usage)).client().complete(HI)["usage"] == {
             "prompt_tokens": 5, "completion_tokens": 2, "reasoning_tokens": None, "cached_tokens": None,
         }
+
+
+class TestTokens:
+    """fixed + input + output = total per request, and the running totals."""
+
+    SYSTEM = [{"role": "system", "content": "s" * 400}]
+    TOOLS = [{"type": "function", "function": {"name": "t", "parameters": {"type": "object", "properties": {}}}}]
+
+    def test_fixed_is_the_system_prompt_and_tools_input_is_the_rest(self):
+        usage = {"prompt_tokens": 500, "completion_tokens": 20, "total_tokens": 520}
+        tokens = Server(_ok(usage=usage)).client().complete(self.SYSTEM + HI, tools=self.TOOLS)["tokens"]
+        fixed = history.estimate(self.SYSTEM + self.TOOLS)
+        assert tokens == {"fixed": fixed, "input": 500 - fixed, "output": 20, "total": 520}
+
+    def test_fixed_never_exceeds_the_prompt(self):
+        usage = {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}
+        tokens = Server(_ok(usage=usage)).client().complete(self.SYSTEM + HI)["tokens"]
+        assert tokens == {"fixed": 10, "input": 0, "output": 2, "total": 12}
+
+    def test_totals_add_up_over_consecutive_requests(self):
+        server = Server(
+            _ok(usage={"prompt_tokens": 500, "completion_tokens": 20, "total_tokens": 520}),
+            _ok(usage={"prompt_tokens": 600, "completion_tokens": 30, "total_tokens": 630}),
+        )
+        llm = server.client()
+        first = llm.complete(self.SYSTEM + HI)["tokens"]
+        second = llm.complete(self.SYSTEM + HI)["tokens"]
+        assert llm.requests == 2
+        assert llm.totals == {key: first[key] + second[key] for key in first}
+        assert llm.totals["total"] == 1150
+
+    def test_a_response_without_usage_counts_nothing(self):
+        llm = Server(_ok()).client()
+        assert llm.complete(HI)["tokens"] is None
+        assert llm.requests == 0
+        assert llm.totals == {"fixed": 0, "input": 0, "output": 0, "total": 0}
 
 
 def _tool_use_failed(failed_generation="no function tag in here"):

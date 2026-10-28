@@ -80,7 +80,7 @@ def test_unknown_command_lists_every_registered_command_sorted(sandboxed_registr
 
     commands.command(zebra)
     _, output = commands.run("/nope", _messages(), Context(log=StubLog()))
-    assert output.endswith("available: /clear, /compact, /exit, /rewind, /sessions, /zebra")
+    assert output.endswith("available: /clear, /compact, /exit, /rewind, /sessions, /tokens, /zebra")
 
 
 @pytest.fixture
@@ -145,6 +145,25 @@ def test_compact_reports_a_summary_that_came_out_no_smaller(small_window):
     new_messages, output = commands.run("/compact", messages, Context(log=StubLog(), llm=VerboseLLM()))
     assert new_messages is messages
     assert output.startswith("The summary came out no smaller")
+
+
+# --- tokens -----------------------------------------------------------------
+
+def test_tokens_shows_the_session_totals():
+    class CountingLLM(StubLLM):
+        totals = {"fixed": 600, "input": 1500, "output": 50, "total": 2150}
+        requests = 2
+
+    _, output = commands.run("/tokens", _messages(), Context(log=StubLog(), llm=CountingLLM()))
+    assert output == "Session: ~600 fixed + 1500 input + 50 output = 2150 total over 2 requests."
+
+
+@pytest.mark.parametrize("llm", [None, StubLLM()], ids=["no-llm", "nothing-counted"])
+def test_tokens_before_any_counts(llm):
+    messages = _messages()
+    new_messages, output = commands.run("/tokens", messages, Context(log=StubLog(), llm=llm))
+    assert new_messages is messages
+    assert output == "No token counts yet."
 
 
 # --- sessions ---------------------------------------------------------------

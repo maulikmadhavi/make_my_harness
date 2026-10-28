@@ -9,6 +9,7 @@ import json
 
 from make_harness import history
 from make_harness.context import with_reminder
+from make_harness.llm import tokens_text
 from make_harness.ui import dim, yellow
 
 
@@ -25,14 +26,13 @@ def _repair_args(arguments):
     if start == -1 or end <= start:
         return None
     try:
-        return json.loads(arguments[start:end + 1])
+        return json.loads(arguments[start : end + 1])
     except json.JSONDecodeError:
         return None
 
 
 SHORT_CIRCUIT_RESULT = (
-    "[not executed: identical to your previous call — the result would be "
-    "unchanged; adjust your arguments or approach]"
+    "[not executed: identical to your previous call — the result would be unchanged; adjust your arguments or approach]"
 )
 DENIED_RESULT = "Denied by user."
 BLOCKED_RESULT = (
@@ -43,14 +43,61 @@ BLOCKED_RESULT = (
 TURN_DENIED = "[tool call denied — tell me how to proceed]"
 
 
-def _usage_line(usage):
-    """'1234 in · 56 out · 800 cached' — the parts the server reported."""
-    parts = [
-        f"{usage[key]} {label}"
-        for key, label in (("prompt_tokens", "in"), ("completion_tokens", "out"), ("cached_tokens", "cached"))
-        if usage.get(key)
-    ]
-    return "  tokens: " + " · ".join(parts) if parts else None
+def _usage_line(resp):
+    """'~300 fixed + 900 input + 30 output = 1230 total · 800 cached', or
+    None when the server reported no counts."""
+    if not resp.get("tokens"):
+        return None
+    line = "  tokens: " + tokens_text(resp["tokens"])
+    if cached := (resp.get("usage") or {}).get("cached_tokens"):
+        line += f" · {cached} cached"
+    return line
+
+
+def _execute_tool_call(tc, step, registry, policy, log, indent, last_executed, interrupted):
+    """Resolve one tool call to its result string.
+
+    Returns (result, last_executed, interrupted) — the updated signature of
+    the last call actually run, and whether the batch is now short-circuited
+    by a denial (once true, every remaining call in the batch is auto-denied).
+    """
+    name = tc["function"]["name"]
+    try:
+        args = json.loads(tc["function"]["arguments"] or "{}")
+    except json.JSONDecodeError:
+        args = _repair_args(tc["function"]["arguments"])
+        if args is not None:
+            log.event("args_repaired", step=step, tool=name, raw=tc["function"]["arguments"][:500])
+
+    if args is None:
+        return f"Error: unparseable tool arguments: {tc['function']['arguments']!r}", last_executed, interrupted
+
+    print(dim(f"{indent}  → {name}({json.dumps(args, ensure_ascii=False)[:200]})"))
+    log.event("tool_call", step=step, tool=name, args=args, id=tc["id"])
+    signature = (name, json.dumps(args, sort_keys=True))
+    if signature == last_executed:
+        # The model repeated its previous call verbatim — don't re-execute;
+        # nudge it instead. The nudge must BE the tool result (not a floating
+        # system message) so the tool_call/tool pairing the API requires
+        # stays intact.
+        print(yellow(f"{indent}  ← short-circuited (identical repeat)"))
+        log.event("short_circuit", step=step, tool=name, id=tc["id"])
+        return SHORT_CIRCUIT_RESULT, last_executed, interrupted
+
+    verdict = "deny" if interrupted else policy.check(name, args)
+    log.event("permission", step=step, tool=name, verdict=verdict)
+    if verdict == "allow":
+        result = registry.execute(name, args)
+        print(dim(f"{indent}  ← {len(result)} chars"))
+        return result, signature, interrupted
+    if verdict == "block":
+        # A rule, not the user, said no: the model gets told why and the
+        # turn goes on.
+        print(yellow(f"{indent}  ← blocked by policy"))
+        return BLOCKED_RESULT, last_executed, interrupted
+
+    print(yellow(f"{indent}  ← denied"))
+    return DENIED_RESULT, last_executed, True
 
 
 def run_turn(llm, registry, policy, log, messages, max_steps=15, reminder=None, indent=""):
@@ -67,7 +114,7 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15, reminder=None, 
         log.event("llm_request", step=step, messages=request)
         resp = llm.complete(request, tools=registry.schemas() or None)
         log.event("llm_response", step=step, raw=resp["raw"])
-        if line := _usage_line(resp.get("usage") or {}):
+        if line := _usage_line(resp):
             print(dim(indent + line))
 
         if not resp["tool_calls"]:
@@ -75,54 +122,13 @@ def run_turn(llm, registry, policy, log, messages, max_steps=15, reminder=None, 
             log.event("done", answer=resp["content"])
             return resp["content"]
 
-        messages.append(
-            {"role": "assistant", "content": resp["content"], "tool_calls": resp["tool_calls"]}
-        )
+        messages.append({"role": "assistant", "content": resp["content"], "tool_calls": resp["tool_calls"]})
         interrupted = False
         for tc in resp["tool_calls"]:
-            name = tc["function"]["name"]
-            try:
-                args = json.loads(tc["function"]["arguments"] or "{}")
-            except json.JSONDecodeError:
-                args = _repair_args(tc["function"]["arguments"])
-                if args is not None:
-                    log.event(
-                        "args_repaired",
-                        step=step,
-                        tool=name,
-                        raw=tc["function"]["arguments"][:500],
-                    )
-            if args is None:
-                result = f"Error: unparseable tool arguments: {tc['function']['arguments']!r}"
-            else:
-                print(dim(f"{indent}  → {name}({json.dumps(args, ensure_ascii=False)[:200]})"))
-                log.event("tool_call", step=step, tool=name, args=args, id=tc["id"])
-                signature = (name, json.dumps(args, sort_keys=True))
-                if signature == last_executed:
-                    # The model repeated its previous call verbatim — don't
-                    # re-execute; nudge it instead. The nudge must BE the tool
-                    # result (not a floating system message) so the
-                    # tool_call/tool pairing the API requires stays intact.
-                    result = SHORT_CIRCUIT_RESULT
-                    print(yellow(f"{indent}  ← short-circuited (identical repeat)"))
-                    log.event("short_circuit", step=step, tool=name, id=tc["id"])
-                else:
-                    verdict = "deny" if interrupted else policy.check(name, args)
-                    log.event("permission", step=step, tool=name, verdict=verdict)
-                    if verdict == "allow":
-                        result = registry.execute(name, args)
-                        last_executed = signature
-                        print(dim(f"{indent}  ← {len(result)} chars"))
-                    elif verdict == "block":
-                        # A rule, not the user, said no: the model gets told
-                        # why and the turn goes on.
-                        result = BLOCKED_RESULT
-                        print(yellow(f"{indent}  ← blocked by policy"))
-                    else:
-                        result = DENIED_RESULT
-                        print(yellow(f"{indent}  ← denied"))
-                        interrupted = True
-            log.event("tool_result", step=step, tool=name, id=tc["id"], result=result[:2000])
+            result, last_executed, interrupted = _execute_tool_call(
+                tc, step, registry, policy, log, indent, last_executed, interrupted
+            )
+            log.event("tool_result", step=step, tool=tc["function"]["name"], id=tc["id"], result=result[:2000])
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
         # A denial hands control back to the user instead of letting the
